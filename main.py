@@ -10,8 +10,8 @@ from zoneinfo import ZoneInfo
 
 URL = "https://biquote.io/api/XAUUSD/ohlc"
 
-BOT_TOKEN = os.getenv("8619686161:AAEyfJQPMkowak5GCluszGZ9N7lGUQ0QVms")
-CHAT_ID = os.getenv("942043461")
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 IRAQ_TZ = ZoneInfo("Asia/Baghdad")
 POLL_SECONDS = 3
