@@ -10,8 +10,8 @@ from zoneinfo import ZoneInfo
 
 URL = "https://biquote.io/api/XAUUSD/ohlc"
 
-BOT_TOKEN = "8619686161:AAEyfJQPMkowak5GCluszGZ9N7lGUQ0QVms"
-CHAT_ID = "942043461"
+BOT_TOKEN = "BOT_TOKEN"
+CHAT_ID = "CHAT_ID"
 
 # هەولێر / عێراق = UTC+3
 IRAQ_TZ = ZoneInfo("Asia/Baghdad")
