@@ -10,10 +10,11 @@ from zoneinfo import ZoneInfo
 
 URL = "https://biquote.io/api/XAUUSD/ohlc"
 
-BOT_TOKEN = "TELEGRAM_BOT_TOKEN"
-CHAT_ID = "TELEGRAM_CHAT_ID"
+import os
 
-# هەولێر / عێراق = UTC+3
+BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+
 IRAQ_TZ = ZoneInfo("Asia/Baghdad")
 
 
@@ -125,9 +126,7 @@ def is_bearish_engulfing(po, pc, co, cc):
 # =========================================================
 
 def send_telegram(message):
-
     try:
-
         telegram_url = (
             f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         )
@@ -144,7 +143,6 @@ def send_telegram(message):
         print("Telegram:", response.status_code)
 
     except Exception as e:
-
         print("Telegram ERROR:", e)
 
 
@@ -153,9 +151,7 @@ def send_telegram(message):
 # =========================================================
 
 def get_bars(interval, limit=10):
-
     try:
-
         response = requests.get(
             URL,
             params={
@@ -165,41 +161,37 @@ def get_bars(interval, limit=10):
             timeout=10
         )
 
+        response.raise_for_status()
         data = response.json()
 
-        if "bars" not in data:
+        if not isinstance(data, dict) or "bars" not in data:
+            print("Market ERROR: API response has no bars")
             return []
 
         return data["bars"]
 
     except Exception as e:
-
         print("Market ERROR:", e)
         return []
 
 
 def get_latest_closed(interval):
-
     bars = get_bars(interval)
 
     for candle in bars:
-
-        if candle.get("isOpen") == False:
+        if candle.get("isOpen") is False:
             return candle
 
     return None
 
 
 def get_two_closed_15m():
-
     bars = get_bars("15m")
 
     closed = []
 
     for candle in bars:
-
-        if candle.get("isOpen") == False:
-
+        if candle.get("isOpen") is False:
             closed.append(candle)
 
         if len(closed) == 2:
@@ -216,7 +208,6 @@ def get_two_closed_15m():
 # =========================================================
 
 def reset_trade():
-
     global direction
     global entry
     global stop_loss
@@ -241,7 +232,6 @@ def reset_trade():
 # =========================================================
 
 def reset_everything():
-
     global support
     global resistance
     global state
@@ -269,7 +259,6 @@ def reset_everything():
 # =========================================================
 
 def start_trade_record():
-
     global current_trade
 
     current_trade = {
@@ -288,7 +277,6 @@ def start_trade_record():
 # =========================================================
 
 def finish_trade_tp1():
-
     global current_trade
 
     if current_trade is None:
@@ -317,7 +305,6 @@ def finish_trade_tp1():
 # =========================================================
 
 def finish_trade_tp2():
-
     global current_trade
 
     if current_trade is None:
@@ -346,14 +333,12 @@ def finish_trade_tp2():
 # =========================================================
 
 def finish_trade_sl():
-
     global current_trade
 
     if current_trade is None:
         start_trade_record()
 
     difference = abs(entry - stop_loss)
-
     sl_pips = round(difference * 10)
 
     current_trade["profit"] = 0
@@ -379,13 +364,11 @@ def finish_trade_sl():
 # =========================================================
 
 def finish_trade_breakeven():
-
     global current_trade
 
     if current_trade is None:
         return
 
-    # چون TP1 گرتووە، ئەنجامی تریدەکە +100 pip ـە
     current_trade["profit"] = 100
     current_trade["stop_loss"] = 0
     current_trade["status"] = "TP1_BE"
@@ -409,7 +392,6 @@ def finish_trade_breakeven():
 # =========================================================
 
 def set_support_resistance(new_support, new_resistance):
-
     global support
     global resistance
     global state
@@ -457,11 +439,9 @@ def set_support_resistance(new_support, new_resistance):
 # =========================================================
 
 def check_telegram():
-
     global last_update_id
 
     try:
-
         telegram_url = (
             f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
         )
@@ -481,7 +461,6 @@ def check_telegram():
             return
 
         for update in data.get("result", []):
-
             last_update_id = update["update_id"]
 
             message = update.get("message")
@@ -490,42 +469,31 @@ def check_telegram():
                 continue
 
             text = message.get("text", "").strip()
-
             chat_id = str(message["chat"]["id"])
 
             if chat_id != str(CHAT_ID):
                 continue
 
-
-            # ---------------------------------------------
             # SUPPORT / RESISTANCE
-            # ---------------------------------------------
-
             if text.startswith("/support"):
-
                 parts = text.split()
 
                 if len(parts) != 3:
-
                     send_telegram(
                         "❌ Wrong format\n\n"
                         "Use:\n"
                         "/support 4275 4300"
                     )
-
                     continue
 
                 try:
-
                     new_support = float(parts[1])
                     new_resistance = float(parts[2])
 
                     if new_support >= new_resistance:
-
                         send_telegram(
                             "❌ Support must be below Resistance."
                         )
-
                         continue
 
                     set_support_resistance(
@@ -534,7 +502,6 @@ def check_telegram():
                     )
 
                 except Exception as e:
-
                     print("S/R ERROR:", e)
 
                     send_telegram(
@@ -543,13 +510,8 @@ def check_telegram():
                         "/support 4275 4300"
                     )
 
-
-            # ---------------------------------------------
             # CANCEL
-            # ---------------------------------------------
-
             elif text == "/cancel":
-
                 reset_everything()
 
                 send_telegram(
@@ -559,22 +521,14 @@ def check_telegram():
                     "/support 4275 4300"
                 )
 
-
-            # ---------------------------------------------
             # STATUS
-            # ---------------------------------------------
-
             elif text == "/status":
-
                 if support is None:
-
                     send_telegram(
                         "⚠️ Support / Resistance not set.\n\n"
                         "/support 4275 4300"
                     )
-
                 else:
-
                     send_telegram(
                         "📊 XAUUSD BOT STATUS\n\n"
                         f"🟦 Support: {support:.2f}\n"
@@ -582,9 +536,7 @@ def check_telegram():
                         f"🤖 State: {state}"
                     )
 
-
     except Exception as e:
-
         print("Telegram CHECK ERROR:", e)
 
 
@@ -593,7 +545,6 @@ def check_telegram():
 # =========================================================
 
 def check_1h():
-
     global state
     global last_1h_time
     global last_15m_time
@@ -619,10 +570,8 @@ def check_1h():
     print("Resistance:", resistance)
     print("================================")
 
-
     # BUY
     if close_price >= resistance + 5.0:
-
         state = "WAITING_BUY_15M"
 
         current = get_latest_closed("15m")
@@ -636,13 +585,10 @@ def check_1h():
         )
 
         print("BUY DIRECTION")
-
         return
-
 
     # SELL
     if close_price <= support - 5.0:
-
         state = "WAITING_SELL_15M"
 
         current = get_latest_closed("15m")
@@ -656,9 +602,7 @@ def check_1h():
         )
 
         print("SELL DIRECTION")
-
         return
-
 
     print("NO 1H BREAKOUT")
 
@@ -668,7 +612,6 @@ def check_1h():
 # =========================================================
 
 def check_buy_confirmation():
-
     global state
     global last_15m_time
     global direction
@@ -707,21 +650,15 @@ def check_buy_confirmation():
         c
     )
 
-
     if hammer or engulfing:
-
         direction = "BUY"
 
         entry = c
-
         stop_loss = l - 3.0
-
         tp1 = entry + 10.0
-
         tp2 = entry + 15.0
 
         tp1_hit = False
-
         state = "MANAGING_BUY"
 
         start_trade_record()
@@ -756,7 +693,6 @@ def check_buy_confirmation():
 # =========================================================
 
 def check_sell_confirmation():
-
     global state
     global last_15m_time
     global direction
@@ -795,21 +731,15 @@ def check_sell_confirmation():
         c
     )
 
-
     if shooting or engulfing:
-
         direction = "SELL"
 
         entry = c
-
         stop_loss = h + 3.0
-
         tp1 = entry - 10.0
-
         tp2 = entry - 15.0
 
         tp1_hit = False
-
         state = "MANAGING_SELL"
 
         start_trade_record()
@@ -844,7 +774,6 @@ def check_sell_confirmation():
 # =========================================================
 
 def manage_buy():
-
     global tp1_hit
     global stop_loss
     global last_manage_15m_time
@@ -856,7 +785,6 @@ def manage_buy():
 
     candle_time = candle["openTime"]
 
-    # هەر کاندل تەنها یەک جار پشکنین بکرێت
     if candle_time == last_manage_15m_time:
         return
 
@@ -865,16 +793,11 @@ def manage_buy():
     high = float(candle["high"])
     low = float(candle["low"])
 
-
-    # ---------------------------------------------
     # BEFORE TP1
-    # ---------------------------------------------
-
     if not tp1_hit:
 
         # STOP LOSS
         if low <= stop_loss:
-
             print("BUY STOP LOSS HIT")
 
             finish_trade_sl()
@@ -888,15 +811,11 @@ def manage_buy():
             )
 
             reset_everything()
-
             return
-
 
         # TP1
         if high >= tp1:
-
             tp1_hit = True
-
             stop_loss = entry
 
             print("BUY TP1 HIT")
@@ -910,19 +829,13 @@ def manage_buy():
                 f"New Stop: {entry:.2f}\n\n"
                 "⏳ Waiting for TP2."
             )
-
             return
 
-
-    # ---------------------------------------------
     # AFTER TP1
-    # ---------------------------------------------
-
     else:
 
         # RETURN TO ENTRY
         if low <= entry:
-
             print("BUY RETURNED TO ENTRY")
 
             finish_trade_breakeven()
@@ -935,13 +848,10 @@ def manage_buy():
             )
 
             reset_everything()
-
             return
-
 
         # TP2
         if high >= tp2:
-
             print("BUY TP2 HIT")
 
             finish_trade_tp2()
@@ -954,7 +864,6 @@ def manage_buy():
             )
 
             reset_everything()
-
             return
 
 
@@ -963,7 +872,6 @@ def manage_buy():
 # =========================================================
 
 def manage_sell():
-
     global tp1_hit
     global stop_loss
     global last_manage_15m_time
@@ -975,7 +883,6 @@ def manage_sell():
 
     candle_time = candle["openTime"]
 
-    # هەر کاندل تەنها یەک جار پشکنین بکرێت
     if candle_time == last_manage_15m_time:
         return
 
@@ -984,16 +891,11 @@ def manage_sell():
     high = float(candle["high"])
     low = float(candle["low"])
 
-
-    # ---------------------------------------------
     # BEFORE TP1
-    # ---------------------------------------------
-
     if not tp1_hit:
 
         # STOP LOSS
         if high >= stop_loss:
-
             print("SELL STOP LOSS HIT")
 
             finish_trade_sl()
@@ -1007,15 +909,11 @@ def manage_sell():
             )
 
             reset_everything()
-
             return
-
 
         # TP1
         if low <= tp1:
-
             tp1_hit = True
-
             stop_loss = entry
 
             print("SELL TP1 HIT")
@@ -1029,19 +927,13 @@ def manage_sell():
                 f"New Stop: {entry:.2f}\n\n"
                 "⏳ Waiting for TP2."
             )
-
             return
 
-
-    # ---------------------------------------------
     # AFTER TP1
-    # ---------------------------------------------
-
     else:
 
         # RETURN TO ENTRY
         if high >= entry:
-
             print("SELL RETURNED TO ENTRY")
 
             finish_trade_breakeven()
@@ -1054,13 +946,10 @@ def manage_sell():
             )
 
             reset_everything()
-
             return
-
 
         # TP2
         if low <= tp2:
-
             print("SELL TP2 HIT")
 
             finish_trade_tp2()
@@ -1073,7 +962,6 @@ def manage_sell():
             )
 
             reset_everything()
-
             return
 
 
@@ -1082,7 +970,6 @@ def manage_sell():
 # =========================================================
 
 def make_weekly_report():
-
     total_profit = 0
     total_stop = 0
 
@@ -1097,39 +984,27 @@ def make_weekly_report():
     ]
 
     for day in day_names:
-
         trades = weekly_results[day]
 
         lines.append("")
         lines.append(day)
 
         if not trades:
-
             lines.append("I didn't have a trade")
-
             continue
 
-
         for index, trade in enumerate(trades, start=1):
-
-            lines.append(
-                f"Signal {index}"
-            )
-
+            lines.append(f"Signal {index}")
             lines.append(
                 f"Profit: {trade['profit']} Pips"
             )
-
             lines.append(
                 f"Stop Loss: {trade['stop_loss']} Pips"
             )
-
             lines.append("")
 
             total_profit += trade["profit"]
-
             total_stop += trade["stop_loss"]
-
 
     lines.append("")
     lines.append("━━━━━━━━━━━━━━")
@@ -1151,18 +1026,17 @@ def make_weekly_report():
 # =========================================================
 
 def check_weekly_report():
-
     global weekly_report_sent
     global last_report_week
     global weekly_results
 
     now = iraq_now()
 
-    # هەینی تەنها
+    # Friday only
     if now.weekday() != 4:
         return
 
-    # 11:00 شەو
+    # 11:00 PM
     if now.hour < 23:
         return
 
@@ -1182,7 +1056,7 @@ def check_weekly_report():
 
     last_report_week = current_week
 
-    # هەفتەی نوێ
+    # Reset for new week
     weekly_results = {
         "Monday": [],
         "Tuesday": [],
@@ -1210,64 +1084,47 @@ print("================================")
 
 
 while True:
-
     try:
 
         # Telegram commands
         check_telegram()
 
-
         # Weekly report
         check_weekly_report()
 
-
         # No S/R
         if support is None or resistance is None:
-
-            print(
-                "Waiting for Support / Resistance..."
-            )
-
+            print("Waiting for Support / Resistance...")
             time.sleep(15)
-
             continue
 
+        # No signals or trade management on weekends
+        if iraq_now().weekday() >= 5:
+            time.sleep(15)
+            continue
 
         # 1H
         if state == "WAITING_1H":
-
             check_1h()
-
 
         # BUY 15M
         elif state == "WAITING_BUY_15M":
-
             check_buy_confirmation()
-
 
         # SELL 15M
         elif state == "WAITING_SELL_15M":
-
             check_sell_confirmation()
-
 
         # MANAGE BUY
         elif state == "MANAGING_BUY":
-
             manage_buy()
-
 
         # MANAGE SELL
         elif state == "MANAGING_SELL":
-
             manage_sell()
-
 
         time.sleep(15)
 
-
     except Exception as e:
-
         print("MAIN ERROR:", e)
-
         time.sleep(15)
