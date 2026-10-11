@@ -4,8 +4,6 @@ import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import asyncio
-asyncio.set_event_loop(asyncio.new_event_loop())
-
 from flask import Flask, request, jsonify
 from metaapi_cloud_sdk import MetaApi
 
@@ -19,11 +17,11 @@ URL = "https://biquote.io/api/XAUUSD/ohlc"
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 CHAT_ID = os.getenv("CHAT_ID", "").strip()
 
-# زانیارییەکانی MetaApi کە پێشتر دروستمان کرد
-API_KEY = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiIzODg3ZDJjNmQ3NTNmYjRkNThjMjJlOGUzMGMyZmUzYyIsImFjY2Vzc1J1bGVzIjpbeyJpZCI6InRyYWRpbmctYWNjb3VudC1tYW5hZ2VtZW50LWFwaSIsIm1ldGhvZHMiOlsidHJhZGluZy1hY2NvdW50LW1hbmFnZW1lbnQtYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6Im1ldGFhcGktcmVzdC1hcGkiLCJtZXRob2RzIjpbIm1ldGFhcGktYXBpOndzOnB1YmxpYzoqOioiXSwicm9sZXMiOlsicmVhZGVyIiwid3JpdGVyIl0sInJlc291cmNlcyI6WyIqOiRVU0VSX0lEJDoqIl19LHsiaWQiOiJtZXRhc3RhdHMtYXBpIiwibWV0aG9kcyI6WyJtZXRhc3RhdHMtYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6InJpc2stbWFuYWdlbWVudC1hcGkiLCJtZXRob2RzIjpbInJpc2stbWFuYWdlbWVudC1hcGktcmVzdDpwdWJsaWM6KjoqIl0sInJvbGVzIjpbInJlYWRlciIsIndyaXRlciJdLCJyZXNvdXJjZXMiOlsiKjokVVNFUl9JRCQ6KiJdfSx7ImlkIjoiY29weWZhY3RvcnktYXBpIiwibWV0aG9kcyI6WyJjb3B5ZmFjdG9yeS1hcGk6cmVzdDpwdWJsaWM6KjoqIl0sInJvbGVzIjpbInJlYWRlciIsIndyaXRlciJdLCJyZXNvdXJjZXMiOlsiKjokVVNFUl9JRCQ6KiJdfSx7ImlkIjoibXQtbWFuYWdlci1hcGkiLCJtZXRob2RzIjpbIm10LW1hbmFnZXItYXBpOnJlc3Q6ZGVhbGluZzoqOioiLCJtdC1tYW5hZ2VtZW50LWFwaS1yZXN0OnB1YmxpYzoqOioiXSwicm9sZXMiOlsicmVhZGVyIiwid3JpdGVyIl0sInJlc291cmNlcyI6WyIqOiRVU0VSX0lEJDoqIl19LHsiaWQiOiJiaWxsaW5nLWFwaSIsIm1ldGhvZHMiOlsiYmlsbGluZy1hcGk6cmVzdDpwdWJsaWM6KjoqIl0sInJvbGVzIjpbInJlYWRlciJdLCJyZXNvdXJjZXMiOlsiKjokVVNFUl9JRCQ6KiJdfV0sImlnbm9yZVJhdGVMaW1pdHMiOmZhbHNlLCJ0b2tlbklkIjoiMjAyMTAyMTMiLCJpbXBlcnNvbmF0ZWQiOmZhbHNlLCJyZWFsVXNlcklkIjoiMzg4N2QyYzZkNzUzZmI0ZDU4YzIyZThlMzBjMmZlM2MiLCJpYXQiOjE3OTE3MzI4NjMsImV4cCI6MTc5OTUwODg2M30.Pn_ctorbaAXmBlJ6qHCj72Simm6dWPNwFOIOsU4MpGy-4VUYOpEqXr1FI-OJt1pzwjuGqIEn9XmkzIieQ6sB8TTFKIawJWoA6WYqzrWGknsd85pddAeCk0tQN1cViWof5_keCkNqszCbK63XFJHEQ2mH1pdaZg9COCV_VWyBD7xcc3mMzT4Sfm6Pb6Bc952Rry-ksgh1fIteiq27LnFlVtaS_C-b817DPXYTdudaqinwMKPpHHCoUadjbEM8KV69Cyeon27egpQyWLAegk2BucHBQZ4jIuAXX-PdHwneyCX42nBpW_qUk6qB0cgHT6_sjO8Psnj0GQknm3qZplWyGT060g4ciNareE1J8-S0rTSorc6bWwryTjZl2q0sMSCWTT8zMgd1-KFqnrqIbb1RJqXgA0hepfB60LjQGfvEHQ71V0KIjoHeax5HGdHU41pSq3j3Jf2Becqdx7hK0HUH376-836WdkZrSfTRC1-Oo9-fXY0SSTIlkEbAyUuZ7xxhf-e6C6PfZplA3ZFDzBoMvjuMDji-oS-w3hcCnWYcdGAdrvc_qHmfTH9c48z-FGAOMJ2_JuQcRewbycNGmVoNN5jyi5NteNgzM4P6JI3IrHY-KE6CsXKpqaatLha6o55PgjdtHohQw6uq838lXllWg3P37_j-ijno9iU5vxW1Kp4"
+# زانیارییەکانی MetaApi
+API_KEY = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiIzODg3ZDJjNmQ3NTNmYjRkNThjMjJlOGUzMGMyZmUzYyIsImFjY2Vzc1J1bGVzIjpbeyJpZCI6InRyYWRpbmctYWNjb3VudC1tYW5hZ2VtZW50LWFwaSIsIm1ldGhvZHMiOlsidHJhZGluZy1hY2NvdW50LW1hbmFnZW1lbnQtYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6Im1ldGFhcGktcmVzdC1hcGkiLCJtZXRob2RzIjpbIm1ldGFhcGktYXBpOndzOnB1YmxpYzoqOioiXSwicm9sZXMiOlsicmVhZGVyIiwid3JpdGVyIl0sInJlc291cmNlcyI6WyIqOiRVU0VSX0lEJDoqIl19LHsiaWQiOiJtZXRhc3RhdHMtYXBpIiwibWV0aG9kcyI6WyJtZXRhc3RhdHMtYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6InJpc2stbWFuYWdlbWVudC1hcGkiLCJtZXRob2RzIjpbInJpc2stbWFuYWdlbWVudC1hcGktcmVzdDpwdWJsaWM6KjoqIl0sInJvbGVzIjpbInJlYzhkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6ImNvcHlmYWN0b3J5LWFwaSIsIm1ldGhvZHMiOlsiY29weWZhY3RvcnktYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6Im10LW1hbmFnZXItYXBpIiwibWV0aG9kcyI6WyJtdC1tYW5hZ2VyLWFwaTpyZXN0OmRlYWxpbmc6KjoqIiwibXQtbWFuYWdlbWVudC1hcGktcmVzdDpwdWJsaWM6KjoqIl0sInJvbGVzIjpbInJlYWRlciIsIndyaXRlciJdLCJyZXNvdXJjZXMiOlsiKjokVVNFUl9JRCQ6KiJdfSx7ImlkIjoiYmlsbGluZy1hcGkiLCJtZXRob2RzIjpbImJpbGxpbmctYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX1dLCJpZ25vcmVSYXRlTGltaXRzIjpmYWxzZSwidG9rZW5JZCI6IjIwMjEwMjEzIiwiaW1wZXJzb25hdGVkIjpmYWxzZSwicmVhbFVzZXJJZCI6IjM4ODdkMmM2ZDc1M2ZiNGQ1OGMyMmU4ZTMwYzJmZTNjIiwiaWF0IjoxNzkxNzMyODYzLCJleHAiOjE3OTk1MDg4NjN9.Pn_ctorbaAXmBlJ6qHCj72Simm6dWPNwFOIOsU4MpGy-4VUYOpEqXr1FI-OJt1pzwjuGqIEn9XmkzIieQ6sB8TTFKIawJWoA6WYqzrWGknsd85pddAeCk0tQN1cViWof5_keCkNqszCbK63XFJHEQ2mH1pdaZg9COCV_VWyBD7xcc3mMzT4Sfm6Pb6Bc952Rry-ksgh1fIteiq27LnFlVtaS_C-b817DPXYTdudaqinwMKPpHHCoUadjbEM8KV69Cyeon27egpQyWLAegk2BucHBQZ4jIuAXX-PdHwneyCX42nBpW_qUk6qB0cgHT6_sjO8Psnj0GQknm3qZplWyGT060g4ciNareE1J8-S0rTSorc6bWwryTjZl2q0sMSCWTT8zMgd1-KFqnrqIbb1RJqXgA0hepfB60LjQGfvEHQ71V0KIjoHeax5HGdHU41pSq3j3Jf2Becqdx7hK0HUH376-836WdkZrSfTRC1-Oo9-fXY0SSTIlkEbAyUuZ7xxhf-e6C6PfZplA3ZFDzBoMvjuMDji-oS-w3hcCnWYcdGAdrvc_qHmfTH9c48z-FGAOMJ2_JuQcRewbycNGmVoNN5jyi5NteNgzM4P6JI3IrHY-KE6CsXKpqaatLha6o55PgjdtHohQw6uq838lXllWg3P37_j-ijno9iU5vxW1Kp4"
 ACCOUNT_ID = "3488c28e-d7bf-485d-8d9c-5efb121082b3"
 
-api = MetaApi(API_KEY)
+api = None
 app = Flask(__name__)
 
 # هەولێر / عێراق = UTC+3
@@ -91,7 +89,6 @@ def today_name():
 
 def is_hammer(o, h, l, c):
     body = abs(c - o)
-
     upper_wick = h - max(o, c)
     lower_wick = min(o, c) - l
 
@@ -104,7 +101,6 @@ def is_hammer(o, h, l, c):
 
 def is_shooting_star(o, h, l, c):
     body = abs(c - o)
-
     upper_wick = h - max(o, c)
     lower_wick = min(o, c) - l
 
@@ -138,13 +134,8 @@ def is_bearish_engulfing(po, pc, co, cc):
 # =========================================================
 
 def send_telegram(message):
-
     try:
-
-        telegram_url = (
-            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        )
-
+        telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
         response = requests.post(
             telegram_url,
             data={
@@ -153,11 +144,8 @@ def send_telegram(message):
             },
             timeout=10
         )
-
         print("Telegram:", response.status_code)
-
     except Exception as e:
-
         print("Telegram ERROR:", e)
 
 
@@ -203,9 +191,7 @@ def place_broker_order(action, volume=0.01, sl=None, tp=None):
 # =========================================================
 
 def get_bars(interval, limit=10):
-
     try:
-
         response = requests.get(
             URL,
             params={
@@ -214,50 +200,33 @@ def get_bars(interval, limit=10):
             },
             timeout=10
         )
-
         data = response.json()
-
         if "bars" not in data:
             return []
-
         return data["bars"]
-
     except Exception as e:
-
         print("Market ERROR:", e)
         return []
 
 
 def get_latest_closed(interval):
-
     bars = get_bars(interval)
-
     for candle in bars:
-
         if candle.get("isOpen") == False:
             return candle
-
     return None
 
 
 def get_two_closed_15m():
-
     bars = get_bars("15m")
-
     closed = []
-
     for candle in bars:
-
         if candle.get("isOpen") == False:
-
             closed.append(candle)
-
         if len(closed) == 2:
             break
-
     if len(closed) < 2:
         return None, None
-
     return closed[0], closed[1]
 
 
@@ -266,16 +235,7 @@ def get_two_closed_15m():
 # =========================================================
 
 def reset_trade():
-
-    global direction
-    global entry
-    global stop_loss
-    global tp1
-    global tp2
-    global tp1_hit
-    global current_trade
-    global last_manage_15m_time
-
+    global direction, entry, stop_loss, tp1, tp2, tp1_hit, current_trade, last_manage_15m_time
     direction = None
     entry = None
     stop_loss = None
@@ -291,21 +251,12 @@ def reset_trade():
 # =========================================================
 
 def reset_everything():
-
-    global support
-    global resistance
-    global state
-    global last_1h_time
-    global last_15m_time
-
+    global support, resistance, state, last_1h_time, last_15m_time
     support = None
     resistance = None
-
     state = "WAITING_SUPPORT_RESISTANCE"
-
     last_1h_time = None
     last_15m_time = None
-
     reset_trade()
 
     print("================================")
@@ -319,16 +270,13 @@ def reset_everything():
 # =========================================================
 
 def start_trade_record():
-
     global current_trade
-
     current_trade = {
         "day": today_name(),
         "profit": 0,
         "stop_loss": 0,
         "status": "OPEN"
     }
-
     print("NEW TRADE RECORD")
     print("Day:", current_trade["day"])
 
@@ -338,9 +286,7 @@ def start_trade_record():
 # =========================================================
 
 def finish_trade_tp1():
-
     global current_trade
-
     if current_trade is None:
         start_trade_record()
 
@@ -349,7 +295,6 @@ def finish_trade_tp1():
     current_trade["status"] = "TP1"
 
     day = current_trade["day"]
-
     weekly_results[day].append({
         "profit": 100,
         "stop_loss": 0
@@ -358,7 +303,6 @@ def finish_trade_tp1():
     print("DAILY RESULT")
     print("Profit:", 100)
     print("Stop Loss:", 0)
-
     current_trade = None
 
 
@@ -367,9 +311,7 @@ def finish_trade_tp1():
 # =========================================================
 
 def finish_trade_tp2():
-
     global current_trade
-
     if current_trade is None:
         start_trade_record()
 
@@ -378,7 +320,6 @@ def finish_trade_tp2():
     current_trade["status"] = "TP2"
 
     day = current_trade["day"]
-
     weekly_results[day].append({
         "profit": 150,
         "stop_loss": 0
@@ -387,7 +328,6 @@ def finish_trade_tp2():
     print("DAILY RESULT")
     print("Profit:", 150)
     print("Stop Loss:", 0)
-
     current_trade = None
 
 
@@ -396,14 +336,11 @@ def finish_trade_tp2():
 # =========================================================
 
 def finish_trade_sl():
-
     global current_trade
-
     if current_trade is None:
         start_trade_record()
 
     difference = abs(entry - stop_loss)
-
     sl_pips = round(difference * 10)
 
     current_trade["profit"] = 0
@@ -411,7 +348,6 @@ def finish_trade_sl():
     current_trade["status"] = "SL"
 
     day = current_trade["day"]
-
     weekly_results[day].append({
         "profit": 0,
         "stop_loss": sl_pips
@@ -420,7 +356,6 @@ def finish_trade_sl():
     print("DAILY RESULT")
     print("Profit:", 0)
     print("Stop Loss:", sl_pips)
-
     current_trade = None
 
 
@@ -429,9 +364,7 @@ def finish_trade_sl():
 # =========================================================
 
 def finish_trade_breakeven():
-
     global current_trade
-
     if current_trade is None:
         return
 
@@ -440,7 +373,6 @@ def finish_trade_breakeven():
     current_trade["status"] = "TP1_BE"
 
     day = current_trade["day"]
-
     weekly_results[day].append({
         "profit": 100,
         "stop_loss": 0
@@ -449,7 +381,6 @@ def finish_trade_breakeven():
     print("DAILY RESULT")
     print("Profit:", 100)
     print("Stop Loss:", 0)
-
     current_trade = None
 
 
@@ -458,33 +389,17 @@ def finish_trade_breakeven():
 # =========================================================
 
 def set_support_resistance(new_support, new_resistance):
-
-    global support
-    global resistance
-    global state
-    global last_1h_time
-    global last_15m_time
-
+    global support, resistance, state, last_1h_time, last_15m_time
     support = new_support
     resistance = new_resistance
-
     state = "WAITING_1H"
-
     reset_trade()
 
     current_1h = get_latest_closed("1h")
-
-    if current_1h:
-        last_1h_time = current_1h["openTime"]
-    else:
-        last_1h_time = None
+    last_1h_time = current_1h["openTime"] if current_1h else None
 
     current_15m = get_latest_closed("15m")
-
-    if current_15m:
-        last_15m_time = current_15m["openTime"]
-    else:
-        last_15m_time = None
+    last_15m_time = current_15m["openTime"] if current_15m else None
 
     print("================================")
     print("NEW SUPPORT / RESISTANCE")
@@ -506,15 +421,9 @@ def set_support_resistance(new_support, new_resistance):
 # =========================================================
 
 def check_telegram():
-
     global last_update_id
-
     try:
-
-        telegram_url = (
-            f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
-        )
-
+        telegram_url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
         response = requests.get(
             telegram_url,
             params={
@@ -523,23 +432,17 @@ def check_telegram():
             },
             timeout=5
         )
-
         data = response.json()
-
         if not data.get("ok"):
             return
 
         for update in data.get("result", []):
-
             last_update_id = update["update_id"]
-
             message = update.get("message")
-
             if not message:
                 continue
 
             text = message.get("text", "").strip()
-
             chat_id = str(message["chat"]["id"])
 
             if chat_id != str(CHAT_ID):
@@ -547,62 +450,24 @@ def check_telegram():
 
             print(f"Telegram Command: {text}", flush=True)
 
-
-            # ---------------------------------------------
-            # SUPPORT / RESISTANCE
-            # ---------------------------------------------
-
             if text.startswith("/support"):
-
                 parts = text.split()
-
                 if len(parts) != 3:
-
-                    send_telegram(
-                        "❌ Wrong format\n\n"
-                        "Use:\n"
-                        "/support 4275 4300"
-                    )
-
+                    send_telegram("❌ Wrong format\n\nUse:\n/support 4275 4300")
                     continue
-
                 try:
-
                     new_support = float(parts[1])
                     new_resistance = float(parts[2])
-
                     if new_support >= new_resistance:
-
-                        send_telegram(
-                            "❌ Support must be below Resistance."
-                        )
-
+                        send_telegram("❌ Support must be below Resistance.")
                         continue
-
-                    set_support_resistance(
-                        new_support,
-                        new_resistance
-                    )
-
+                    set_support_resistance(new_support, new_resistance)
                 except Exception as e:
-
                     print("S/R ERROR:", e)
-
-                    send_telegram(
-                        "❌ Wrong format\n\n"
-                        "Use:\n"
-                        "/support 4275 4300"
-                    )
-
-
-            # ---------------------------------------------
-            # CANCEL
-            # ---------------------------------------------
+                    send_telegram("❌ Wrong format\n\nUse:\n/support 4275 4300")
 
             elif text == "/cancel":
-
                 reset_everything()
-
                 send_telegram(
                     "❌ SUPPORT / RESISTANCE CANCELLED\n\n"
                     "⏳ Waiting for new Support / Resistance.\n\n"
@@ -610,22 +475,10 @@ def check_telegram():
                     "/support 4275 4300"
                 )
 
-
-            # ---------------------------------------------
-            # STATUS
-            # ---------------------------------------------
-
             elif text == "/status":
-
                 if support is None:
-
-                    send_telegram(
-                        "⚠️ Support / Resistance not set.\n\n"
-                        "/support 4275 4300"
-                    )
-
+                    send_telegram("⚠️ Support / Resistance not set.\n\n/support 4275 4300")
                 else:
-
                     send_telegram(
                         "📊 XAUUSD BOT STATUS\n\n"
                         f"🟦 Support: {support:.2f}\n"
@@ -633,9 +486,7 @@ def check_telegram():
                         f"🤖 State: {state}"
                     )
 
-
     except Exception as e:
-
         print("Telegram CHECK ERROR:", e)
 
 
@@ -644,25 +495,18 @@ def check_telegram():
 # =========================================================
 
 def check_1h():
-
-    global state
-    global last_1h_time
-    global last_15m_time
-
+    global state, last_1h_time, last_15m_time
     print("Checking 1H market & waiting for breakout...", flush=True)
 
     candle = get_latest_closed("1h")
-
     if candle is None:
         return
 
     candle_time = candle["openTime"]
-
     if candle_time == last_1h_time:
         return
 
     last_1h_time = candle_time
-
     close_price = float(candle["close"])
 
     print("================================")
@@ -672,14 +516,9 @@ def check_1h():
     print("Resistance:", resistance)
     print("================================")
 
-
-    # BUY
     if close_price >= resistance + 5.0:
-
         state = "WAITING_BUY_15M"
-
         current = get_latest_closed("15m")
-
         if current:
             last_15m_time = current["openTime"]
 
@@ -687,19 +526,12 @@ def check_1h():
             "confirmation for Today Buy\n\n"
             "wait for Confirmation Candle Buy 15M"
         )
-
         print("BUY DIRECTION")
-
         return
 
-
-    # SELL
     if close_price <= support - 5.0:
-
         state = "WAITING_SELL_15M"
-
         current = get_latest_closed("15m")
-
         if current:
             last_15m_time = current["openTime"]
 
@@ -707,11 +539,8 @@ def check_1h():
             "confirmation for Today Sell\n\n"
             "wait for Confirmation Candle Sell 15M"
         )
-
         print("SELL DIRECTION")
-
         return
-
 
     print("NO 1H BREAKOUT")
 
@@ -721,23 +550,12 @@ def check_1h():
 # =========================================================
 
 def check_buy_confirmation():
-
-    global state
-    global last_15m_time
-    global direction
-    global entry
-    global stop_loss
-    global tp1
-    global tp2
-    global tp1_hit
-
+    global state, last_15m_time, direction, entry, stop_loss, tp1, tp2, tp1_hit
     current, previous = get_two_closed_15m()
-
     if current is None or previous is None:
         return
 
     candle_time = current["openTime"]
-
     if candle_time == last_15m_time:
         return
 
@@ -752,38 +570,19 @@ def check_buy_confirmation():
     pc = float(previous["close"])
 
     hammer = is_hammer(o, h, l, c)
-
-    engulfing = is_bullish_engulfing(
-        po,
-        pc,
-        o,
-        c
-    )
-
+    engulfing = is_bullish_engulfing(po, pc, o, c)
 
     if hammer or engulfing:
-
         direction = "BUY"
-
         entry = c
-
         stop_loss = l - 3.0
-
         tp1 = entry + 10.0
-
         tp2 = entry + 15.0
-
         tp1_hit = False
-
         state = "MANAGING_BUY"
-
         start_trade_record()
 
-        pattern = (
-            "Hammer"
-            if hammer
-            else "Bullish Engulfing"
-        )
+        pattern = "Hammer" if hammer else "Bullish Engulfing"
 
         print("================================")
         print("BUY SIGNAL")
@@ -794,7 +593,6 @@ def check_buy_confirmation():
         print("TP2:", tp2)
         print("================================")
 
-        # ئەنجامدانی مامەڵەی کڕین لەسەر برۆکەر لە ڕێگەی MetaApi
         place_broker_order("BUY", volume=0.01, sl=stop_loss, tp=tp2)
 
         send_telegram(
@@ -812,23 +610,12 @@ def check_buy_confirmation():
 # =========================================================
 
 def check_sell_confirmation():
-
-    global state
-    global last_15m_time
-    global direction
-    global entry
-    global stop_loss
-    global tp1
-    global tp2
-    global tp1_hit
-
+    global state, last_15m_time, direction, entry, stop_loss, tp1, tp2, tp1_hit
     current, previous = get_two_closed_15m()
-
     if current is None or previous is None:
         return
 
     candle_time = current["openTime"]
-
     if candle_time == last_15m_time:
         return
 
@@ -843,38 +630,19 @@ def check_sell_confirmation():
     pc = float(previous["close"])
 
     shooting = is_shooting_star(o, h, l, c)
-
-    engulfing = is_bearish_engulfing(
-        po,
-        pc,
-        o,
-        c
-    )
-
+    engulfing = is_bearish_engulfing(po, pc, o, c)
 
     if shooting or engulfing:
-
         direction = "SELL"
-
         entry = c
-
         stop_loss = h + 3.0
-
         tp1 = entry - 10.0
-
         tp2 = entry - 15.0
-
         tp1_hit = False
-
         state = "MANAGING_SELL"
-
         start_trade_record()
 
-        pattern = (
-            "Shooting Star"
-            if shooting
-            else "Bearish Engulfing"
-        )
+        pattern = "Shooting Star" if shooting else "Bearish Engulfing"
 
         print("================================")
         print("SELL SIGNAL")
@@ -885,7 +653,6 @@ def check_sell_confirmation():
         print("TP2:", tp2)
         print("================================")
 
-        # ئەنجامدانی مامەڵەی فرۆشتن لەسەر برۆکەر لە ڕێگەی MetaApi
         place_broker_order("SELL", volume=0.01, sl=stop_loss, tp=tp2)
 
         send_telegram(
@@ -903,35 +670,23 @@ def check_sell_confirmation():
 # =========================================================
 
 def manage_buy():
-
-    global tp1_hit
-    global stop_loss
-    global last_manage_15m_time
-
+    global tp1_hit, stop_loss, last_manage_15m_time
     candle = get_latest_closed("15m")
-
     if candle is None:
         return
 
     candle_time = candle["openTime"]
-
     if candle_time == last_manage_15m_time:
         return
 
     last_manage_15m_time = candle_time
-
     high = float(candle["high"])
     low = float(candle["low"])
 
-
     if not tp1_hit:
-
         if low <= stop_loss:
-
             print("BUY STOP LOSS HIT")
-
             finish_trade_sl()
-
             send_telegram(
                 "SORRY STOP LOSS\n\n"
                 "«ئەرکی من پێشبینیکردنی هەموو تریدێک نییە؛ "
@@ -939,21 +694,14 @@ def manage_buy():
                 "⛔ No more trade.\n"
                 "⏳ Waiting for new Support / Resistance."
             )
-
             reset_everything()
-
             return
 
-
         if high >= tp1:
-
             tp1_hit = True
-
             stop_loss = entry
-
             print("BUY TP1 HIT")
             print("NEW STOP:", stop_loss)
-
             send_telegram(
                 "CONGRATULATIONS 🎉\n\n"
                 "پیروزبێت تارگێتی یەکەم.\n\n"
@@ -962,44 +710,30 @@ def manage_buy():
                 f"New Stop: {entry:.2f}\n\n"
                 "⏳ Waiting for TP2."
             )
-
             return
-
     else:
-
         if low <= entry:
-
             print("BUY RETURNED TO ENTRY")
-
             finish_trade_breakeven()
-
             send_telegram(
                 "⚠️ NOW NO TRADE\n\n"
                 "بازار گەڕایەوە بۆ شوێنی داخل بوون.\n\n"
                 "هیچ ئیعازێکی نوێ مەدە.\n"
                 "⏳ چاوەڕێی Support / Resistance ـی نوێ بکە."
             )
-
             reset_everything()
-
             return
 
-
         if high >= tp2:
-
             print("BUY TP2 HIT")
-
             finish_trade_tp2()
-
             send_telegram(
                 "CONGRATULATIONS 🎉\n\n"
                 "پیروزبێت تارگێتی دووەم.\n\n"
                 "هەموو مامەڵەکان قەپات بکە.\n\n"
                 "⏳ Waiting for new Support / Resistance."
             )
-
             reset_everything()
-
             return
 
 
@@ -1008,35 +742,23 @@ def manage_buy():
 # =========================================================
 
 def manage_sell():
-
-    global tp1_hit
-    global stop_loss
-    global last_manage_15m_time
-
+    global tp1_hit, stop_loss, last_manage_15m_time
     candle = get_latest_closed("15m")
-
     if candle is None:
         return
 
     candle_time = candle["openTime"]
-
     if candle_time == last_manage_15m_time:
         return
 
     last_manage_15m_time = candle_time
-
     high = float(candle["high"])
     low = float(candle["low"])
 
-
     if not tp1_hit:
-
         if high >= stop_loss:
-
             print("SELL STOP LOSS HIT")
-
             finish_trade_sl()
-
             send_telegram(
                 "SORRY STOP LOSS\n\n"
                 "«ئەرکی من پێشبینیکردنی هەموو تریدێک نییە؛ "
@@ -1044,21 +766,14 @@ def manage_sell():
                 "⛔ No more trade.\n"
                 "⏳ Waiting for new Support / Resistance."
             )
-
             reset_everything()
-
             return
 
-
         if low <= tp1:
-
             tp1_hit = True
-
             stop_loss = entry
-
             print("SELL TP1 HIT")
             print("NEW STOP:", stop_loss)
-
             send_telegram(
                 "CONGRATULATIONS 🎉\n\n"
                 "پیروزبێت تارگێتی یەکەم.\n\n"
@@ -1067,42 +782,29 @@ def manage_sell():
                 f"New Stop: {entry:.2f}\n\n"
                 "⏳ Waiting for TP2."
             )
-
             return
-
     else:
-
         if high >= entry:
-
             print("SELL RETURNED TO ENTRY")
-
             finish_trade_breakeven()
-
             send_telegram(
                 "⚠️ NOW NO TRADE\n\n"
                 "بازار گەڕایەوە بۆ شوێنی داخل بوون.\n\n"
                 "هیچ ئیعازێکی نوێ مەدە.\n"
                 "⏳ چاوەڕێی Support / Resistance ـی نوێ بکە."
             )
-
             reset_everything()
-
             return
 
-
         if low <= tp2:
-
             print("SELL TP2 HIT")
-
             finish_trade_tp2()
-
             send_telegram(
                 "CONGRATULATIONS 🎉\n\n"
                 "پیروزبێت تارگێتی دووەم.\n\n"
                 "هەموو مامەڵەکان قەپات بکە.\n\n"
                 "⏳ Waiting for new Support / Resistance."
             )
-
             return
 
 
@@ -1111,66 +813,34 @@ def manage_sell():
 # =========================================================
 
 def make_weekly_report():
-
     total_profit = 0
     total_stop = 0
-
     lines = []
-
-    day_names = [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday"
-    ]
+    day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
     for day in day_names:
-
         trades = weekly_results[day]
-
         lines.append("")
         lines.append(day)
-
         if not trades:
-
             lines.append("I didn't have a trade")
-
             continue
 
-
         for index, trade in enumerate(trades, start=1):
-
-            lines.append(
-                f"Signal {index}"
-            )
-
-            lines.append(
-                f"Profit: {trade['profit']} Pips"
-            )
-
-            lines.append(
-                f"Stop Loss: {trade['stop_loss']} Pips"
-            )
-
+            lines.append(f"Signal {index}")
+            lines.append(f"Profit: {trade['profit']} Pips")
+            lines.append(f"Stop Loss: {trade['stop_loss']} Pips")
             lines.append("")
-
             total_profit += trade["profit"]
-
             total_stop += trade["stop_loss"]
-
 
     lines.append("")
     lines.append("━━━━━━━━━━━━━━")
     lines.append("")
     lines.append("Total Weekly")
     lines.append("")
-    lines.append(
-        f"Take Profit: {total_profit} Pips"
-    )
-    lines.append(
-        f"Stop Loss: {total_stop} Pips"
-    )
+    lines.append(f"Take Profit: {total_profit} Pips")
+    lines.append(f"Stop Loss: {total_stop} Pips")
 
     return "📊 Weekly Result\n" + "\n".join(lines)
 
@@ -1180,35 +850,24 @@ def make_weekly_report():
 # =========================================================
 
 def check_weekly_report():
-
-    global weekly_report_sent
-    global last_report_week
-    global weekly_results
-
+    global weekly_report_sent, last_report_week, weekly_results
     now = iraq_now()
 
-    if now.weekday() != 4:
-        return
-
-    if now.hour < 23:
+    if now.weekday() != 4 or now.hour < 23:
         return
 
     current_week = now.strftime("%Y-%W")
-
     if last_report_week == current_week:
         return
 
     report = make_weekly_report()
-
     print("================================")
     print("WEEKLY REPORT")
     print(report)
     print("================================")
 
     send_telegram(report)
-
     last_report_week = current_week
-
     weekly_results = {
         "Monday": [],
         "Tuesday": [],
@@ -1216,9 +875,7 @@ def check_weekly_report():
         "Thursday": [],
         "Friday": []
     }
-
     weekly_report_sent = True
-
     print("WEEKLY RESULTS RESET")
 
 
@@ -1236,6 +893,10 @@ def index():
 # =========================================================
 
 def run_bot_loop():
+    global api
+    # لێرە MetaApi دروست دەبێت کاتێک لە ناو Thread و Event Loopـدایە
+    api = MetaApi(API_KEY)
+
     print("================================")
     print("XAUUSD TELEGRAM & METAAPI BOT STARTED")
     print("================================")
@@ -1244,69 +905,38 @@ def run_bot_loop():
     print("================================")
 
     while True:
-
         try:
-
             check_telegram()
-
             check_weekly_report()
 
             if support is None or resistance is None:
-
-                print(
-                    "Waiting for Support / Resistance..."
-                )
-
+                print("Waiting for Support / Resistance...")
                 time.sleep(15)
-
                 continue
 
             if state == "WAITING_1H":
-
                 check_1h()
-
             elif state == "WAITING_BUY_15M":
-
                 check_buy_confirmation()
-
             elif state == "WAITING_SELL_15M":
-
                 check_sell_confirmation()
-
             elif state == "MANAGING_BUY":
-
                 manage_buy()
-
             elif state == "MANAGING_SELL":
-
                 manage_sell()
 
             time.sleep(15)
 
         except Exception as e:
-
             print("MAIN ERROR:", e)
-
             time.sleep(15)
 
 
-def start_bot_thread():
-    # دروستکردن و چالاککردنی loop بۆ ئەو Thread-ەی بووتەکەی تێدا بەگەڕ دەکەوێت
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(run_bot_loop())
-
 if __name__ == '__main__':
     import threading
-    import asyncio
-
-    # دەستپێکردنی بووت لە Thread-ێکی تایبەتدا لەگەڵ Event Loop-ی چالاک
-    t = threading.Thread(target=start_bot_thread, daemon=True)
+    
+    t = threading.Thread(target=run_bot_loop, daemon=True)
     t.start()
 
-    # بەگەڕخستنی Flask بۆ سێرڤەری Railway
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-
-
-   
