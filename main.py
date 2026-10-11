@@ -1,3 +1,4 @@
+import os
 import requests
 import time
 from datetime import datetime
@@ -10,12 +11,8 @@ from zoneinfo import ZoneInfo
 
 URL = "https://biquote.io/api/XAUUSD/ohlc"
 
-
-import os
-
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 CHAT_ID = os.getenv("CHAT_ID", "").strip()
-
 
 # هەولێر / عێراق = UTC+3
 IRAQ_TZ = ZoneInfo("Asia/Baghdad")
@@ -389,7 +386,6 @@ def finish_trade_breakeven():
     if current_trade is None:
         return
 
-    # چون TP1 گرتووە، ئەنجامی تریدەکە +100 pip ـە
     current_trade["profit"] = 100
     current_trade["stop_loss"] = 0
     current_trade["status"] = "TP1_BE"
@@ -499,8 +495,8 @@ def check_telegram():
 
             if chat_id != str(CHAT_ID):
                 continue
-           print(f"Telegram Command: {text}", flush=True)
-     
+
+            print(f"Telegram Command: {text}", flush=True)
 
 
             # ---------------------------------------------
@@ -862,7 +858,6 @@ def manage_buy():
 
     candle_time = candle["openTime"]
 
-    # هەر کاندل تەنها یەک جار پشکنین بکرێت
     if candle_time == last_manage_15m_time:
         return
 
@@ -878,7 +873,6 @@ def manage_buy():
 
     if not tp1_hit:
 
-        # STOP LOSS
         if low <= stop_loss:
 
             print("BUY STOP LOSS HIT")
@@ -898,7 +892,6 @@ def manage_buy():
             return
 
 
-        # TP1
         if high >= tp1:
 
             tp1_hit = True
@@ -926,7 +919,6 @@ def manage_buy():
 
     else:
 
-        # RETURN TO ENTRY
         if low <= entry:
 
             print("BUY RETURNED TO ENTRY")
@@ -945,7 +937,6 @@ def manage_buy():
             return
 
 
-        # TP2
         if high >= tp2:
 
             print("BUY TP2 HIT")
@@ -981,7 +972,6 @@ def manage_sell():
 
     candle_time = candle["openTime"]
 
-    # هەر کاندل تەنها یەک جار پشکنین بکرێت
     if candle_time == last_manage_15m_time:
         return
 
@@ -997,7 +987,6 @@ def manage_sell():
 
     if not tp1_hit:
 
-        # STOP LOSS
         if high >= stop_loss:
 
             print("SELL STOP LOSS HIT")
@@ -1017,7 +1006,6 @@ def manage_sell():
             return
 
 
-        # TP1
         if low <= tp1:
 
             tp1_hit = True
@@ -1045,7 +1033,6 @@ def manage_sell():
 
     else:
 
-        # RETURN TO ENTRY
         if high >= entry:
 
             print("SELL RETURNED TO ENTRY")
@@ -1064,7 +1051,6 @@ def manage_sell():
             return
 
 
-        # TP2
         if low <= tp2:
 
             print("SELL TP2 HIT")
@@ -1164,11 +1150,9 @@ def check_weekly_report():
 
     now = iraq_now()
 
-    # هەینی تەنها
     if now.weekday() != 4:
         return
 
-    # 11:00 شەو
     if now.hour < 23:
         return
 
@@ -1188,7 +1172,6 @@ def check_weekly_report():
 
     last_report_week = current_week
 
-    # هەفتەی نوێ
     weekly_results = {
         "Monday": [],
         "Tuesday": [],
@@ -1219,15 +1202,10 @@ while True:
 
     try:
 
-        # Telegram commands
         check_telegram()
 
-
-        # Weekly report
         check_weekly_report()
 
-
-        # No S/R
         if support is None or resistance is None:
 
             print(
@@ -1238,39 +1216,27 @@ while True:
 
             continue
 
-
-        # 1H
         if state == "WAITING_1H":
 
             check_1h()
 
-
-        # BUY 15M
         elif state == "WAITING_BUY_15M":
 
             check_buy_confirmation()
 
-
-        # SELL 15M
         elif state == "WAITING_SELL_15M":
 
             check_sell_confirmation()
 
-
-        # MANAGE BUY
         elif state == "MANAGING_BUY":
 
             manage_buy()
 
-
-        # MANAGE SELL
         elif state == "MANAGING_SELL":
 
             manage_sell()
 
-
         time.sleep(15)
-
 
     except Exception as e:
 
