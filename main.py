@@ -600,6 +600,9 @@ def check_1h():
     global last_1h_time
     global last_15m_time
 
+    # لێرەدا پرینتێک زیاد کراوە تا هەمیشە هەموو ١٥ چرکەیەک لە لۆگدا دەردەکەوێت
+    print("Checking 1H market & waiting for breakout...", flush=True)
+
     candle = get_latest_closed("1h")
 
     if candle is None:
@@ -1063,8 +1066,6 @@ def manage_sell():
                 "هەموو مامەڵەکان قەپات بکە.\n\n"
                 "⏳ Waiting for new Support / Resistance."
             )
-
-            reset_everything()
 
             return
 
