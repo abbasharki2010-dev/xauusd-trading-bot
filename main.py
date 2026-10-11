@@ -17,8 +17,8 @@ URL = "https://biquote.io/api/XAUUSD/ohlc"
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 CHAT_ID = os.getenv("CHAT_ID", "").strip()
 
-# زانیارییەکانی MetaApi
-API_KEY = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiIzODg3ZDJjNmQ3NTNmYjRkNThjMjJlOGUzMGMyZmUzYyIsImFjY2Vzc1J1bGVzIjpbeyJpZCI6InRyYWRpbmctYWNjb3VudC1tYW5hZ2VtZW50LWFwaSIsIm1ldGhvZHMiOlsidHJhZGluZy1hY2NvdW50LW1hbmFnZW1lbnQtYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6Im1ldGFhcGktcmVzdC1hcGkiLCJtZXRob2RzIjpbIm1ldGFhcGktYXBpOndzOnB1YmxpYzoqOioiXSwicm9sZXMiOlsicmVhZGVyIiwid3JpdGVyIl0sInJlc291cmNlcyI6WyIqOiRVU0VSX0lEJDoqIl19LHsiaWQiOiJtZXRhc3RhdHMtYXBpIiwIm1ldGhvZHMiOlsibWV0YXN0YXRzLWFwaTpyZXN0OnB1YmxpYzoqOioiXSwicm9sZXMiOlsicmVhZGVyIiwid3JpdGVyIl0sInJlc291cmNlcyI6WyIqOiRVU0VSX0lEJDoqIl19LHsiaWQiOiJyaXNrLW1hbmFnZW1lbnQtYXBpIiwibWV0aG9kcyI6WyJyaXNrLW1hbmFnZW1lbnQtYXBpLXJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6ImNvcHlmYWN0b3J5LWFwaSIsIm1ldGhvZHMiOlsic29weWZhY3RvcnktYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6Im10LW1hbmFnZXItYXBpIiwibWV0aG9kcyI6WyJtdC1tYW5hZ2VyLWFwaTpyZXN0OmRlYWxpbmc6KjoqIiwibXQtbWFuYWdlbWVudC1hcGktcmVzdDpwdWJsaWM6KjoqIl0sImRvbGVzIjpbInJlYWRlciIsIndyaXRlciJdLCJyZXNvdXJjZXMiOlsiKjokVVNFUl9JRCQ6KiJdfSx7ImlkIjoiYmlsbGluZy1hcGkiLCJtZXRob2RzIjpbImJpbGxpbmctYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX1dLCJpZ25vcmVSYXRlTGltaXRzIjpmYWxzZSwidG9rZW5JZCI6IjIwMjEwMjEzIiwiaW1wZXJzb25hdGVkIjpmYWxzZSwicmVhbFVzZXJJZCI6IjM4ODdkMmM2ZDc1M2ZiNGQ1OGMyMmU4ZTMwYzJmZTNjIiwiaWF0IjoxNzkxNzMyODYzLCJleHAiOjE3OTk1MDg4NjN9.Pn_ctorbaAXmBlJ6qHCj72Simm6dWPNwFOIOsU4MpGy-4VUYOpEqXr1FI-OJt1pzwjuGqIEn9XmkzIieQ6sB8TTFKIawJWoA6WYqzrWGknsd85pddAeCk0tQN1cViWof5_keCkNqszCbK63XFJHEQ2mH1pdaZg9COCV_VWyBD7xcc3mMzT4Sfm6Pb6Bc952Rry-ksgh1fIteiq27LnFlVtaS_C-b817DPXYTdudaqinwMKPpHHCoUadjbEM8KV69Cyeon27egpQyWLAegk2BucHBQZ4jIuAXX-PdHwneyCX42nBpW_qUk6qB0cgHT6_sjO8Psnj0GQknm3qZplWyGT060g4ciNareE1J8-S0rTSorc6bWwryTjZl2q0sMSCWTT8zMgd1-KFqnrqIbb1RJqXgA0hepfB60LjQGfvEHQ71V0KIjoHeax5HGdHU41pSq3j3Jf2Becqdx7hK0HUH376-836WdkZrSfTRC1-Oo9-fXY0SSTIlkEbAyUuZ7xxhf-e6C6PfZplA3ZFDzBoMvjuMDji-oS-w3hcCnWYcdGAdrvc_qHmfTH9c48z-FGAOMJ2_JuQcRewbycNGmVoNN5jyi5NteNgzM4P6JI3IrHY-KE6CsXKpqaatLha6o55PgjdtHohQw6uq838lXllWg3P37_j-ijno9iU5vxW1Kp4"
+# زانیارییەکانی MetaApi کە پێشتر دروستمان کرد
+API_KEY = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiIzODg3ZDJjNmQ3NTNmYjRkNThjMjJlOGUzMGMyZmUzYyIsImFjY2Vzc1J1bGVzIjpbeyJpZCI6InRyYWRpbmctYWNjb3VudC1tYW5hZ2VtZW50LWFwaSIsIm1ldGhvZHMiOlsidHJhZGluZy1hY2NvdW50LW1hbmFnZW1lbnQtYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6Im1ldGFhcGktcmVzdC1hcGkiLCJtZXRob2RzIjpbIm1ldGFhcGktYXBpOndzOnB1YmxpYzoqOioiXSwicm9sZXMiOlsicmVhZGVyIiwid3JpdGVyIl0sInJlc291cmNlcyI6WyIqOiRVU0VSX0lEJDoqIl19LHsiaWQiOiJtZXRhc3RhdHMtYXBpIiwIm1ldGhvZHMiOlsibWV0YXN0YXRzLWFwaTpyZXN0OnB1YmxpYzoqOioiXSwicm9sZXMiOlsicmVhZGVyIiwid3JpdGVyIl0sInJlc291cmNlcyI6WyIqOiRVU0VSX0lEJDoqIl19LHsiaWQiOiJyaXNrLW1hbmFnZW1lbnQtYXBpIiwIm1ldGhvZHMiOlsicmlzay1tYW5hZ2VtZW50LWFwaS1yZXN0OnB1YmxpYzoqOioiXSwicm9sZXMiOlsicmVhZGVyIiwid3JpdGVyIl0sInJlc291cmNlcyI6WyIqOiRVU0VSX0lEJDoqIl19LHsiaWQiOiJjb3B5ZmFjdG9yeS1hcGkiLCJtZXRob2RzIjpbImNvcHlmYWN0b3J5LWFwaTpyZXN0OnB1YmxpYzoqOioiXSwicm9sZXMiOlsicmVhZGVyIiwid3JpdGVyIl0sInJlc291cmNlcyI6WyIqOiRVU0VSX0lEJDoqIl19LHsiaWQiOiJtdC1tYW5hZ2VyLWFwaSIsIm1ldGhvZHMiOlsibXQtbWFuYWdlci1hcGk6cmVzdDpkZWFsaW5nOio6KiIsIm10LW1hbmFnZW1lbnQtYXBpLXJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6ImJpbGxpbmctYXBpIiwibWV0aG9kcyI6WyJiaWxsaW5nLWFwaTpyZXN0OnB1YmxpYzoqOioiXSwicm9sZXMiOlsicmVhZGVyIl0sInJlc291cmNlcyI6WyIqOiRVU0VSX0lEJDoqIl19XSwiaWdub3JlUmF0ZUxpbWl0cyI6mZhbHNlLCJ0b2tlbklkIjoiMjAyMTAyMTMiLCJpbXBlcnNvbmF0ZWQiOmZhbHNlLCJyZWFsVXNlcklkIjoiMzg4N2QyYzZkNzUzZmI0ZDU4YzIyZThlMzBjMmZlM2MiLCJpYXQiOjE3OTE3MzI4NjMsImV4cCI6MTc5OTUwODg2M30.Pn_ctorbaAXmBlJ6qHCj72Simm6dWPNwFOIOsU4MpGy-4VUYOpEqXr1FI-OJt1pzwjuGqIEn9XmkzIieQ6sB8TTFKIawJWoA6WYqzrWGknsd85pddAeCk0tQN1cViWof5_keCkNqszCbK63XFJHEQ2mH1pdaZg9COCV_VWyBD7xcc3mMzT4Sfm6Pb6Bc952Rry-ksgh1fIteiq27LnFlVtaS_C-b817DPXYTdudaqinwMKPpHHCoUadjbEM8KV69Cyeon27egpQyWLAegk2BucHBQZ4jIuAXX-PdHwneyCX42nBpW_qUk6qB0cgHT6_sjO8Psnj0GQknm3qZplWyGT060g4ciNareE1J8-S0rTSorc6bWwryTjZl2q0sMSCWTT8zMgd1-KFqnrqIbb1RJqXgA0hepfB60LjQGfvEHQ71V0KIjoHeax5HGdHU41pSq3j3Jf2Becqdx7hK0HUH376-836WdkZrSfTRC1-Oo9-fXY0SSTIlkEbAyUuZ7xxhf-e6C6PfZplA3ZFDzBoMvjuMDji-oS-w3hcCnWYcdGAdrvc_qHmfTH9c48z-FGAOMJ2_JuQcRewbycNGmVoNN5jyi5NteNgzM4P6JI3IrHY-KE6CsXKpqaatLha6o55PgjdtHohQw6uq838lXllWg3P37_j-ijno9iU5vxW1Kp4"
 ACCOUNT_ID = "3488c28e-d7bf-485d-8d9c-5efb121082b3"
 
 api = None
@@ -889,14 +889,10 @@ def index():
 
 
 # =========================================================
-# MAIN LOOP THREAD
+# MAIN ASYNC LOOP & THREAD
 # =========================================================
 
-def run_bot_loop():
-    # دروستکردنی Event Loop بۆ ئەم Threadـە پێش دەستپێکردنی MetaApi
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
+async def main_bot():
     global api
     api = MetaApi(API_KEY)
 
@@ -914,7 +910,7 @@ def run_bot_loop():
 
             if support is None or resistance is None:
                 print("Waiting for Support / Resistance...")
-                time.sleep(15)
+                await asyncio.sleep(15)
                 continue
 
             if state == "WAITING_1H":
@@ -928,11 +924,14 @@ def run_bot_loop():
             elif state == "MANAGING_SELL":
                 manage_sell()
 
-            time.sleep(15)
+            await asyncio.sleep(15)
 
         except Exception as e:
             print("MAIN ERROR:", e)
-            time.sleep(15)
+            await asyncio.sleep(15)
+
+def run_bot_loop():
+    asyncio.run(main_bot())
 
 
 if __name__ == '__main__':
