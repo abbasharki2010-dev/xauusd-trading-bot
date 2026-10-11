@@ -1290,6 +1290,20 @@ def run_bot_loop():
 
 if __name__ == '__main__':
     import threading
+    import asyncio
+
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    t = threading.Thread(target=run_bot_loop, daemon=True)
+    t.start()
+
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
+
     
     # دەستپێکردنی لۆپی سەرەکی بووت لە Background Thread
     t = threading.Thread(target=run_bot_loop, daemon=True)
