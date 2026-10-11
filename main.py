@@ -10,7 +10,6 @@ from zoneinfo import ZoneInfo
 from flask import Flask, jsonify
 from metaapi_cloud_sdk import MetaApi
 
-
 # =====================================================
 # SETTINGS
 # =====================================================
@@ -43,7 +42,6 @@ meta_thread = None
 meta_ready = threading.Event()
 meta_init_lock = threading.Lock()
 
-
 # =====================================================
 # BOT STATE
 # =====================================================
@@ -73,7 +71,6 @@ weekly_results = {
 }
 
 last_report_week = None
-
 
 # =====================================================
 # METAAPI EVENT LOOP
@@ -129,7 +126,6 @@ def start_metaapi_loop():
     if not meta_ready.wait(timeout=10):
         raise RuntimeError("MetaApi event loop failed to start")
 
-
 async def initialize_metaapi():
     global api
 
@@ -141,7 +137,6 @@ async def initialize_metaapi():
         api = MetaApi(METAAPI_TOKEN)
 
     return api
-
 
 def run_metaapi(coro, timeout=120):
     try:
@@ -160,7 +155,6 @@ def run_metaapi(coro, timeout=120):
             coro.close()
         raise
 
-
 # =====================================================
 # TIME / CANDLE HELPERS
 # =====================================================
@@ -168,10 +162,8 @@ def run_metaapi(coro, timeout=120):
 def iraq_now():
     return datetime.now(IRAQ_TZ)
 
-
 def today_name():
     return iraq_now().strftime("%A")
-
 
 def is_closed(candle):
     value = candle.get("isOpen")
@@ -179,7 +171,6 @@ def is_closed(candle):
         value is False
         or str(value).lower() in ("false", "0")
     )
-
 
 def candle_time_key(candle):
     value = candle.get("openTime", 0)
@@ -194,7 +185,6 @@ def candle_time_key(candle):
         except (ValueError, TypeError, OverflowError):
             return 0
 
-
 def candle_time_id(candle):
     if not candle:
         return None
@@ -205,7 +195,6 @@ def candle_time_id(candle):
         return candle_time_key(candle)
 
     return str(value)
-
 
 def get_bars(interval, limit=30):
     try:
@@ -237,7 +226,6 @@ def get_bars(interval, limit=30):
         print("Market ERROR:", repr(e), flush=True)
         return []
 
-
 def get_closed_bars(interval, count=2):
     bars = get_bars(interval, 30)
 
@@ -248,11 +236,9 @@ def get_closed_bars(interval, count=2):
 
     return closed[:count]
 
-
 def get_latest_closed(interval):
     bars = get_closed_bars(interval, 1)
     return bars[0] if bars else None
-
 
 # =====================================================
 # CANDLE PATTERNS
@@ -272,7 +258,6 @@ def is_hammer(o, h, l, c):
         and upper <= body
     )
 
-
 def is_shooting_star(o, h, l, c):
     body = abs(c - o)
 
@@ -287,7 +272,6 @@ def is_shooting_star(o, h, l, c):
         and lower <= body
     )
 
-
 def is_bullish_engulfing(po, pc, co, cc):
     return (
         pc < po
@@ -296,7 +280,6 @@ def is_bullish_engulfing(po, pc, co, cc):
         and cc >= po
     )
 
-
 def is_bearish_engulfing(po, pc, co, cc):
     return (
         pc > po
@@ -304,7 +287,6 @@ def is_bearish_engulfing(po, pc, co, cc):
         and co >= pc
         and cc <= po
     )
-
 
 # =====================================================
 # TELEGRAM
@@ -347,7 +329,6 @@ def send_telegram(message):
         print("Telegram ERROR:", repr(e), flush=True)
         return False
 
-
 # =====================================================
 # RESET
 # =====================================================
@@ -367,7 +348,6 @@ def reset_trade():
     position_id = None
     last_manage_15m_time = None
 
-
 def reset_everything():
     global support, resistance, state
     global last_1h_time, last_15m_time
@@ -386,7 +366,6 @@ def reset_everything():
         "RESET: Waiting for new Support / Resistance",
         flush=True
     )
-
 
 # =====================================================
 # METAAPI ORDERS
@@ -450,7 +429,6 @@ async def broker_order(action, volume, sl, tp):
         "position_id": pid
     }
 
-
 def place_broker_order(action, volume, sl, tp):
     try:
         return run_metaapi(
@@ -460,7 +438,6 @@ def place_broker_order(action, volume, sl, tp):
     except Exception as e:
         print("MetaApi ORDER ERROR:", repr(e), flush=True)
         return False, str(e)
-
 
 async def modify_broker_position(pid, new_sl, new_tp):
     global api
@@ -489,7 +466,6 @@ async def modify_broker_position(pid, new_sl, new_tp):
 
     return True
 
-
 def move_broker_sl_to_entry():
     if not position_id:
         print(
@@ -510,7 +486,6 @@ def move_broker_sl_to_entry():
     except Exception as e:
         print("MetaApi MODIFY ERROR:", repr(e), flush=True)
         return False
-
 
 # =====================================================
 # SUPPORT / RESISTANCE
@@ -547,7 +522,6 @@ def set_support_resistance(new_support, new_resistance):
         resistance,
         flush=True
     )
-
 
 # =====================================================
 # TELEGRAM COMMANDS
@@ -660,7 +634,6 @@ def check_telegram():
             flush=True
         )
 
-
 # =====================================================
 # 1H BREAKOUT
 # =====================================================
@@ -726,7 +699,6 @@ def check_1h():
     else:
         print("NO 1H BREAKOUT", flush=True)
 
-
 # =====================================================
 # TRADE RECORDS
 # =====================================================
@@ -741,7 +713,6 @@ def start_trade_record():
         "status": "OPEN"
     }
 
-
 def finish_trade(result):
     global current_trade
 
@@ -754,7 +725,6 @@ def finish_trade(result):
         weekly_results[day].append(result)
 
     current_trade = None
-
 
 # =====================================================
 # OPEN TRADE
@@ -842,7 +812,6 @@ def open_trade(action, candle, pattern):
         flush=True
     )
 
-
 # =====================================================
 # 15M CONFIRMATION
 # =====================================================
@@ -913,7 +882,6 @@ def check_confirmation(action):
                 current,
                 "Bearish Engulfing"
             )
-
 
 # =====================================================
 # TRADE MANAGEMENT
@@ -1062,7 +1030,6 @@ def manage_trade():
 
             reset_everything()
 
-
 # =====================================================
 # WEEKLY REPORT
 # =====================================================
@@ -1100,7 +1067,6 @@ def make_weekly_report():
 
     return "\n".join(lines)
 
-
 def check_weekly_report():
     global last_report_week, weekly_results
 
@@ -1129,7 +1095,6 @@ def check_weekly_report():
             ]
         }
 
-
 # =====================================================
 # FLASK
 # =====================================================
@@ -1137,7 +1102,6 @@ def check_weekly_report():
 @app.route("/", methods=["GET"])
 def index():
     return "XAUUSD Bot is running", 200
-
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -1153,7 +1117,6 @@ def health():
         )
     }), 200
 
-
 # =====================================================
 # MAIN LOOP
 # =====================================================
@@ -1164,10 +1127,13 @@ def run_bot_loop():
     print("AUTO_TRADE:", AUTO_TRADE, flush=True)
 
     if not BOT_TOKEN or not CHAT_ID:
-        print(
-            "WARNING: Telegram credentials missing",
-            flush=True
-        )
+    print("========== TELEGRAM CONFIG CHECK ==========", flush=True)
+    print("BOT_TOKEN configured:", bool(BOT_TOKEN), flush=True)
+    print("CHAT_ID configured:", bool(CHAT_ID), flush=True)
+    print("Check Railway Variables for this service.", flush=True)
+    print("===========================================", flush=True)
+else:
+    print("Telegram credentials are configured.", flush=True)
 
     if AUTO_TRADE:
         print(
@@ -1215,7 +1181,6 @@ def run_bot_loop():
                 flush=True
             )
             time.sleep(15)
-
 
 # =====================================================
 # START
