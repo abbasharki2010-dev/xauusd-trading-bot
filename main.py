@@ -499,6 +499,8 @@ def check_telegram():
 
             if chat_id != str(CHAT_ID):
                 continue
+           print(f"Telegram Command: {text}", flush=True)
+     
 
 
             # ---------------------------------------------
