@@ -357,12 +357,19 @@ def manage_sell():
 
 async def main_bot():
     global api
+    
+    # سڕینەوەی Webhook بە خۆڕسکی بۆ ئەوەی کێشەی 401 Unauthorized نەمێنێت
+    try:
+        requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=5)
+        print("Webhook deleted successfully via code!")
+    except Exception as e:
+        print("Delete webhook error:", e)
+
     api = MetaApi(API_KEY)
     print("XAUUSD TELEGRAM & METAAPI BOT STARTED SUCCESSFULLY")
 
     while True:
         try:
-            # پشکنینی بەردەوامی تێلیگرام بۆ ئەوەی خێرا وەڵام بداتەوە
             for _ in range(3):
                 check_telegram()
                 await asyncio.sleep(5)
