@@ -3,6 +3,9 @@ import requests
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
+import asyncio
+from flask import Flask, request, jsonify
+from metaapi_cloud_sdk import MetaApi
 
 
 # =========================================================
@@ -13,6 +16,13 @@ URL = "https://biquote.io/api/XAUUSD/ohlc"
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
 CHAT_ID = os.getenv("CHAT_ID", "").strip()
+
+# زانیارییەکانی MetaApi کە پێشتر دروستمان کرد
+API_KEY = "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiIzODg3ZDJjNmQ3NTNmYjRkNThjMjJlOGUzMGMyZmUzYyIsImFjY2Vzc1J1bGVzIjpbeyJpZCI6InRyYWRpbmctYWNjb3VudC1tYW5hZ2VtZW50LWFwaSIsIm1ldGhvZHMiOlsidHJhZGluZy1hY2NvdW50LW1hbmFnZW1lbnQtYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6Im1ldGFhcGktcmVzdC1hcGkiLCJtZXRob2RzIjpbIm1ldGFhcGktYXBpOndzOnB1YmxpYzoqOioiXSwicm9sZXMiOlsicmVhZGVyIiwid3JpdGVyIl0sInJlc291cmNlcyI6WyIqOiRVU0VSX0lEJDoqIl19LHsiaWQiOiJtZXRhc3RhdHMtYXBpIiwibWV0aG9kcyI6WyJtZXRhc3RhdHMtYXBpOnJlc3Q6cHVibGljOio6KiJdLCJyb2xlcyI6WyJyZWFkZXIiLCJ3cml0ZXIiXSwicmVzb3VyY2VzIjpbIio6JFVTRVJfSUQkOioiXX0seyJpZCI6InJpc2stbWFuYWdlbWVudC1hcGkiLCJtZXRob2RzIjpbInJpc2stbWFuYWdlbWVudC1hcGktcmVzdDpwdWJsaWM6KjoqIl0sInJvbGVzIjpbInJlYWRlciIsIndyaXRlciJdLCJyZXNvdXJjZXMiOlsiKjokVVNFUl9JRCQ6KiJdfSx7ImlkIjoiY29weWZhY3RvcnktYXBpIiwibWV0aG9kcyI6WyJjb3B5ZmFjdG9yeS1hcGk6cmVzdDpwdWJsaWM6KjoqIl0sInJvbGVzIjpbInJlYWRlciIsIndyaXRlciJdLCJyZXNvdXJjZXMiOlsiKjokVVNFUl9JRCQ6KiJdfSx7ImlkIjoibXQtbWFuYWdlci1hcGkiLCJtZXRob2RzIjpbIm10LW1hbmFnZXItYXBpOnJlc3Q6ZGVhbGluZzoqOioiLCJtdC1tYW5hZ2VtZW50LWFwaS1yZXN0OnB1YmxpYzoqOioiXSwicm9sZXMiOlsicmVhZGVyIiwid3JpdGVyIl0sInJlc291cmNlcyI6WyIqOiRVU0VSX0lEJDoqIl19LHsiaWQiOiJiaWxsaW5nLWFwaSIsIm1ldGhvZHMiOlsiYmlsbGluZy1hcGk6cmVzdDpwdWJsaWM6KjoqIl0sInJvbGVzIjpbInJlYWRlciJdLCJyZXNvdXJjZXMiOlsiKjokVVNFUl9JRCQ6KiJdfV0sImlnbm9yZVJhdGVMaW1pdHMiOmZhbHNlLCJ0b2tlbklkIjoiMjAyMTAyMTMiLCJpbXBlcnNvbmF0ZWQiOmZhbHNlLCJyZWFsVXNlcklkIjoiMzg4N2QyYzZkNzUzZmI0ZDU4YzIyZThlMzBjMmZlM2MiLCJpYXQiOjE3OTE3MzI4NjMsImV4cCI6MTc5OTUwODg2M30.Pn_ctorbaAXmBlJ6qHCj72Simm6dWPNwFOIOsU4MpGy-4VUYOpEqXr1FI-OJt1pzwjuGqIEn9XmkzIieQ6sB8TTFKIawJWoA6WYqzrWGknsd85pddAeCk0tQN1cViWof5_keCkNqszCbK63XFJHEQ2mH1pdaZg9COCV_VWyBD7xcc3mMzT4Sfm6Pb6Bc952Rry-ksgh1fIteiq27LnFlVtaS_C-b817DPXYTdudaqinwMKPpHHCoUadjbEM8KV69Cyeon27egpQyWLAegk2BucHBQZ4jIuAXX-PdHwneyCX42nBpW_qUk6qB0cgHT6_sjO8Psnj0GQknm3qZplWyGT060g4ciNareE1J8-S0rTSorc6bWwryTjZl2q0sMSCWTT8zMgd1-KFqnrqIbb1RJqXgA0hepfB60LjQGfvEHQ71V0KIjoHeax5HGdHU41pSq3j3Jf2Becqdx7hK0HUH376-836WdkZrSfTRC1-Oo9-fXY0SSTIlkEbAyUuZ7xxhf-e6C6PfZplA3ZFDzBoMvjuMDji-oS-w3hcCnWYcdGAdrvc_qHmfTH9c48z-FGAOMJ2_JuQcRewbycNGmVoNN5jyi5NteNgzM4P6JI3IrHY-KE6CsXKpqaatLha6o55PgjdtHohQw6uq838lXllWg3P37_j-ijno9iU5vxW1Kp4"
+ACCOUNT_ID = "3488c28e-d7bf-485d-8d9c-5efb121082b3"
+
+api = MetaApi(API_KEY)
+app = Flask(__name__)
 
 # هەولێر / عێراق = UTC+3
 IRAQ_TZ = ZoneInfo("Asia/Baghdad")
@@ -147,6 +157,43 @@ def send_telegram(message):
     except Exception as e:
 
         print("Telegram ERROR:", e)
+
+
+# =========================================================
+# METAAPI BROKER EXECUTION
+# =========================================================
+
+async def execute_trade_on_broker(action, volume=0.01, sl=None, tp=None):
+    try:
+        account = await api.metatrader_account_api.get_account(ACCOUNT_ID)
+        
+        if account.state != 'DEPLOYED':
+            await account.deploy()
+        await account.wait_connected()
+
+        connection = account.get_rpc_connection()
+        await connection.connect()
+        await connection.wait_synchronized()
+
+        symbol = "XAUUSD"
+        
+        if action == "BUY":
+            result = await connection.create_market_buy_order(symbol, volume, sl, tp)
+            print("MetaApi Buy Executed:", result)
+            return True, result
+        elif action == "SELL":
+            result = await connection.create_market_sell_order(symbol, volume, sl, tp)
+            print("MetaApi Sell Executed:", result)
+            return True, result
+            
+    except Exception as e:
+        print("MetaApi Trade ERROR:", str(e))
+        return False, str(e)
+
+def place_broker_order(action, volume=0.01, sl=None, tp=None):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    return loop.run_until_complete(execute_trade_on_broker(action, volume, sl, tp))
 
 
 # =========================================================
@@ -600,7 +647,6 @@ def check_1h():
     global last_1h_time
     global last_15m_time
 
-    # لێرەدا پرینتێک زیاد کراوە تا هەمیشە هەموو ١٥ چرکەیەک لە لۆگدا دەردەکەوێت
     print("Checking 1H market & waiting for breakout...", flush=True)
 
     candle = get_latest_closed("1h")
@@ -746,8 +792,11 @@ def check_buy_confirmation():
         print("TP2:", tp2)
         print("================================")
 
+        # ئەنجامدانی مامەڵەی کڕین لەسەر برۆکەر لە ڕێگەی MetaApi
+        place_broker_order("BUY", volume=0.01, sl=stop_loss, tp=tp2)
+
         send_telegram(
-            "🟢 XAUUSD BUY SIGNAL\n\n"
+            "🟢 XAUUSD BUY SIGNAL & ORDER PLACED\n\n"
             f"Pattern: {pattern}\n\n"
             f"Entry Buy point: {entry:.2f}\n\n"
             f"Stop: {stop_loss:.2f}\n\n"
@@ -834,8 +883,11 @@ def check_sell_confirmation():
         print("TP2:", tp2)
         print("================================")
 
+        # ئەنجامدانی مامەڵەی فرۆشتن لەسەر برۆکەر لە ڕێگەی MetaApi
+        place_broker_order("SELL", volume=0.01, sl=stop_loss, tp=tp2)
+
         send_telegram(
-            "🔴 XAUUSD SELL SIGNAL\n\n"
+            "🔴 XAUUSD SELL SIGNAL & ORDER PLACED\n\n"
             f"Pattern: {pattern}\n\n"
             f"Entry Sell point: {entry:.2f}\n\n"
             f"Stop: {stop_loss:.2f}\n\n"
@@ -869,10 +921,6 @@ def manage_buy():
     high = float(candle["high"])
     low = float(candle["low"])
 
-
-    # ---------------------------------------------
-    # BEFORE TP1
-    # ---------------------------------------------
 
     if not tp1_hit:
 
@@ -914,11 +962,6 @@ def manage_buy():
             )
 
             return
-
-
-    # ---------------------------------------------
-    # AFTER TP1
-    # ---------------------------------------------
 
     else:
 
@@ -984,10 +1027,6 @@ def manage_sell():
     low = float(candle["low"])
 
 
-    # ---------------------------------------------
-    # BEFORE TP1
-    # ---------------------------------------------
-
     if not tp1_hit:
 
         if high >= stop_loss:
@@ -1028,11 +1067,6 @@ def manage_sell():
             )
 
             return
-
-
-    # ---------------------------------------------
-    # AFTER TP1
-    # ---------------------------------------------
 
     else:
 
@@ -1187,60 +1221,80 @@ def check_weekly_report():
 
 
 # =========================================================
-# MAIN
+# FLASK WEBHOOK ROUTE (For Railway server)
 # =========================================================
 
-print("================================")
-print("XAUUSD TELEGRAM BOT STARTED")
-print("================================")
-
-print("Time zone: Iraq / Erbil UTC+3")
-print("Weekly report: Friday 23:00")
-print("================================")
+@app.route('/', methods=['GET'])
+def index():
+    return "XAUUSD Trading Bot & MetaApi is Running Live!", 200
 
 
-while True:
+# =========================================================
+# MAIN LOOP THREAD
+# =========================================================
 
-    try:
+def run_bot_loop():
+    print("================================")
+    print("XAUUSD TELEGRAM & METAAPI BOT STARTED")
+    print("================================")
+    print("Time zone: Iraq / Erbil UTC+3")
+    print("Weekly report: Friday 23:00")
+    print("================================")
 
-        check_telegram()
+    while True:
 
-        check_weekly_report()
+        try:
 
-        if support is None or resistance is None:
+            check_telegram()
 
-            print(
-                "Waiting for Support / Resistance..."
-            )
+            check_weekly_report()
+
+            if support is None or resistance is None:
+
+                print(
+                    "Waiting for Support / Resistance..."
+                )
+
+                time.sleep(15)
+
+                continue
+
+            if state == "WAITING_1H":
+
+                check_1h()
+
+            elif state == "WAITING_BUY_15M":
+
+                check_buy_confirmation()
+
+            elif state == "WAITING_SELL_15M":
+
+                check_sell_confirmation()
+
+            elif state == "MANAGING_BUY":
+
+                manage_buy()
+
+            elif state == "MANAGING_SELL":
+
+                manage_sell()
 
             time.sleep(15)
 
-            continue
+        except Exception as e:
 
-        if state == "WAITING_1H":
+            print("MAIN ERROR:", e)
 
-            check_1h()
+            time.sleep(15)
 
-        elif state == "WAITING_BUY_15M":
 
-            check_buy_confirmation()
+if __name__ == '__main__':
+    import threading
+    
+    # دەستپێکردنی لۆپی سەرەکی بووت لە Background Thread
+    t = threading.Thread(target=run_bot_loop, daemon=True)
+    t.start()
 
-        elif state == "WAITING_SELL_15M":
-
-            check_sell_confirmation()
-
-        elif state == "MANAGING_BUY":
-
-            manage_buy()
-
-        elif state == "MANAGING_SELL":
-
-            manage_sell()
-
-        time.sleep(15)
-
-    except Exception as e:
-
-        print("MAIN ERROR:", e)
-
-        time.sleep(15)
+    # بەگەڕخستنی خزمەتگوزاری Flask بۆ ڕاگرتنی پڕۆژەکە لەسەر Railway
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
