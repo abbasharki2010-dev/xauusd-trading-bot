@@ -1288,27 +1288,23 @@ def run_bot_loop():
             time.sleep(15)
 
 
+def start_bot_thread():
+    # دروستکردن و چالاککردنی loop بۆ ئەو Thread-ەی بووتەکەی تێدا بەگەڕ دەکەوێت
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(run_bot_loop())
+
 if __name__ == '__main__':
     import threading
     import asyncio
 
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-    t = threading.Thread(target=run_bot_loop, daemon=True)
+    # دەستپێکردنی بووت لە Thread-ێکی تایبەتدا لەگەڵ Event Loop-ی چالاک
+    t = threading.Thread(target=start_bot_thread, daemon=True)
     t.start()
 
+    # بەگەڕخستنی Flask بۆ سێرڤەری Railway
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
 
-    
-    # دەستپێکردنی لۆپی سەرەکی بووت لە Background Thread
-    t = threading.Thread(target=run_bot_loop, daemon=True)
-    t.start()
 
-    # بەگەڕخستنی خزمەتگوزاری Flask بۆ ڕاگرتنی پڕۆژەکە لەسەر Railway
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+   
