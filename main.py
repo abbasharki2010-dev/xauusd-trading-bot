@@ -4,6 +4,8 @@ import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import asyncio
+asyncio.set_event_loop(asyncio.new_event_loop())
+
 from flask import Flask, request, jsonify
 from metaapi_cloud_sdk import MetaApi
 
