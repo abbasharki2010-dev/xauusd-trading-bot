@@ -1,1 +1,3 @@
+metaapi-cloud-sdk
+Flask
 requests
