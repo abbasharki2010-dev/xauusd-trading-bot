@@ -15,6 +15,7 @@ BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
 IRAQ_TZ = ZoneInfo("Asia/Baghdad")
+
 POLL_SECONDS = 15
 BREAKOUT_DISTANCE = 5.0
 STOP_BUFFER = 3.0
@@ -72,14 +73,12 @@ def today_name():
 
 def send_telegram(message):
     if not BOT_TOKEN or not CHAT_ID:
-        print("ERROR: Telegram environment variables are missing.")
+        print("ERROR: Telegram variables are missing.")
         return False
 
     try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-
         response = session.post(
-            url,
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
             data={
                 "chat_id": CHAT_ID,
                 "text": message
@@ -172,13 +171,13 @@ def get_bars(interval, limit=10):
         data = response.json()
 
         if not isinstance(data, dict):
-            print("Market ERROR: Unexpected response format.")
+            print("Market ERROR: Unexpected response.")
             return []
 
         bars = data.get("bars", [])
 
         if not isinstance(bars, list):
-            print("Market ERROR: 'bars' is not a list.")
+            print("Market ERROR: bars is not a list.")
             return []
 
         return bars
@@ -212,7 +211,7 @@ def get_two_closed_15m():
     if len(closed) < 2:
         return None, None
 
-    # This assumes the API returns newest candles first.
+    # Assumes the API returns newest candles first.
     return closed[0], closed[1]
 
 
@@ -260,8 +259,8 @@ def record_result(profit, loss, status):
         })
 
     print("TRADE RESULT:", status)
-    print("Profit:", profit)
-    print("Stop Loss:", loss)
+    print("Profit:", profit, "Pips")
+    print("Stop Loss:", loss, "Pips")
 
     current_trade = None
 
@@ -284,7 +283,8 @@ def finish_trade_sl():
 
 
 def finish_trade_breakeven():
-    record_result(100, 0, "TP1_BE")
+    # TP1 was reached before price returned to entry.
+    record_result(100, 0, "TP1_BREAKEVEN")
 
 
 # =========================================================
@@ -311,7 +311,9 @@ def reset_everything():
 
     support = None
     resistance = None
+
     state = "WAITING_SUPPORT_RESISTANCE"
+
     last_1h_time = None
     last_15m_time = None
 
@@ -329,7 +331,9 @@ def set_support_resistance(new_support, new_resistance):
     global last_1h_time, last_15m_time
 
     if new_support >= new_resistance:
-        send_telegram("❌ Support must be below Resistance.")
+        send_telegram(
+            "❌ Support must be below Resistance."
+        )
         return
 
     support = new_support
@@ -342,10 +346,13 @@ def set_support_resistance(new_support, new_resistance):
     current_15m = get_latest_closed("15m")
 
     last_1h_time = (
-        candle_time(current_1h) if current_1h else None
+        candle_time(current_1h)
+        if current_1h else None
     )
+
     last_15m_time = (
-        candle_time(current_15m) if current_15m else None
+        candle_time(current_15m)
+        if current_15m else None
     )
 
     print("NEW SUPPORT / RESISTANCE")
@@ -357,8 +364,7 @@ def set_support_resistance(new_support, new_resistance):
         "✅ SUPPORT / RESISTANCE UPDATED\n\n"
         f"🟦 Support: {support:.2f}\n"
         f"🟥 Resistance: {resistance:.2f}\n\n"
-        "🤖 Bot is watching XAUUSD.\n"
-        "📊 Signal-only mode: NO ORDERS."
+        "🤖 Bot is watching XAUUSD."
     )
 
 
@@ -393,11 +399,14 @@ def check_telegram():
             last_update_id = update["update_id"]
 
             message = update.get("message")
+
             if not message:
                 continue
 
             text = message.get("text", "").strip()
-            chat_id = str(message.get("chat", {}).get("id", ""))
+            chat_id = str(
+                message.get("chat", {}).get("id", "")
+            )
 
             if chat_id != str(CHAT_ID):
                 continue
@@ -435,6 +444,7 @@ def check_telegram():
 
             elif text == "/cancel":
                 reset_everything()
+
                 send_telegram(
                     "❌ SUPPORT / RESISTANCE CANCELLED\n\n"
                     "⏳ Waiting for new Support / Resistance.\n\n"
@@ -452,8 +462,7 @@ def check_telegram():
                         "📊 XAUUSD BOT STATUS\n\n"
                         f"🟦 Support: {support:.2f}\n"
                         f"🟥 Resistance: {resistance:.2f}\n"
-                        f"🤖 State: {state}\n"
-                        "📊 Signal-only mode: NO ORDERS."
+                        f"🤖 State: {state}"
                     )
 
     except Exception as e:
@@ -486,14 +495,14 @@ def check_1h():
         state = "WAITING_BUY_15M"
 
         current = get_latest_closed("15m")
-        last_15m_time = candle_time(current) if current else None
+        last_15m_time = (
+            candle_time(current) if current else None
+        )
 
         send_telegram(
             "🟢 CONFIRMATION FOR TODAY: BUY\n\n"
-            "1H breakout confirmed.\n"
-            "Wait for Hammer or Bullish Engulfing "
-            "on a CLOSED 15M candle.\n\n"
-            "No order will be placed."
+            "1H breakout confirmed. Wait for Hammer "
+            "or Bullish Engulfing on a CLOSED 15M candle."
         )
 
         return
@@ -502,14 +511,14 @@ def check_1h():
         state = "WAITING_SELL_15M"
 
         current = get_latest_closed("15m")
-        last_15m_time = candle_time(current) if current else None
+        last_15m_time = (
+            candle_time(current) if current else None
+        )
 
         send_telegram(
             "🔴 CONFIRMATION FOR TODAY: SELL\n\n"
-            "1H breakout confirmed.\n"
-            "Wait for Shooting Star or Bearish Engulfing "
-            "on a CLOSED 15M candle.\n\n"
-            "No order will be placed."
+            "1H breakout confirmed. Wait for Shooting Star "
+            "or Bearish Engulfing on a CLOSED 15M candle."
         )
 
         return
@@ -524,6 +533,7 @@ def check_1h():
 def check_buy_confirmation():
     global state, last_15m_time
     global direction, entry, stop_loss, tp1, tp2, tp1_hit
+    global last_manage_15m_time
 
     current, previous = get_two_closed_15m()
 
@@ -552,13 +562,26 @@ def check_buy_confirmation():
     tp1 = entry + TP1_DISTANCE
     tp2 = entry + TP2_DISTANCE
     tp1_hit = False
+
+    # Do not manage the signal candle as a post-entry candle.
+    last_manage_15m_time = current_id
+
     state = "MANAGING_BUY"
 
     start_trade_record()
 
-    pattern = "Hammer" if hammer else "Bullish Engulfing"
+    pattern = (
+        "Hammer" if hammer else "Bullish Engulfing"
+    )
 
-    print("BUY SIGNAL", pattern, entry, stop_loss, tp1, tp2)
+    print(
+        "BUY SIGNAL",
+        pattern,
+        entry,
+        stop_loss,
+        tp1,
+        tp2
+    )
 
     send_telegram(
         "🟢 XAUUSD BUY SIGNAL\n\n"
@@ -566,8 +589,7 @@ def check_buy_confirmation():
         f"Entry: {entry:.2f}\n"
         f"Stop Loss: {stop_loss:.2f}\n"
         f"TP1: {tp1:.2f}\n"
-        f"TP2: {tp2:.2f}\n\n"
-        "📊 SIGNAL ONLY — NO ORDER PLACED."
+        f"TP2: {tp2:.2f}"
     )
 
 
@@ -578,6 +600,7 @@ def check_buy_confirmation():
 def check_sell_confirmation():
     global state, last_15m_time
     global direction, entry, stop_loss, tp1, tp2, tp1_hit
+    global last_manage_15m_time
 
     current, previous = get_two_closed_15m()
 
@@ -606,13 +629,26 @@ def check_sell_confirmation():
     tp1 = entry - TP1_DISTANCE
     tp2 = entry - TP2_DISTANCE
     tp1_hit = False
+
+    # Do not manage the signal candle as a post-entry candle.
+    last_manage_15m_time = current_id
+
     state = "MANAGING_SELL"
 
     start_trade_record()
 
-    pattern = "Shooting Star" if shooting else "Bearish Engulfing"
+    pattern = (
+        "Shooting Star" if shooting else "Bearish Engulfing"
+    )
 
-    print("SELL SIGNAL", pattern, entry, stop_loss, tp1, tp2)
+    print(
+        "SELL SIGNAL",
+        pattern,
+        entry,
+        stop_loss,
+        tp1,
+        tp2
+    )
 
     send_telegram(
         "🔴 XAUUSD SELL SIGNAL\n\n"
@@ -620,8 +656,7 @@ def check_sell_confirmation():
         f"Entry: {entry:.2f}\n"
         f"Stop Loss: {stop_loss:.2f}\n"
         f"TP1: {tp1:.2f}\n"
-        f"TP2: {tp2:.2f}\n\n"
-        "📊 SIGNAL ONLY — NO ORDER PLACED."
+        f"TP2: {tp2:.2f}"
     )
 
 
@@ -633,6 +668,7 @@ def manage_buy():
     global tp1_hit, stop_loss, last_manage_15m_time
 
     candle = get_latest_closed("15m")
+
     if candle is None:
         return
 
@@ -645,14 +681,14 @@ def manage_buy():
 
     _, high, low, _ = candle_prices(candle)
 
-    # Before TP1, use conservative SL-first handling
-    # if both levels are touched in the same candle.
+    # Before TP1, check SL first if both levels are touched.
     if not tp1_hit:
+
         if low <= stop_loss:
             finish_trade_sl()
 
             send_telegram(
-                "⛔ BUY SIGNAL: STOP LOSS REACHED\n\n"
+                "⛔ SORRY FOR STOP LOSS\n\n"
                 "The signal is finished.\n"
                 "Waiting for new Support / Resistance."
             )
@@ -665,21 +701,26 @@ def manage_buy():
             stop_loss = entry
 
             send_telegram(
-                "🎉 BUY SIGNAL: TP1 REACHED\n\n"
+                "🎉 CONGRATULATIONS!\n\n"
+                "Target One — 100 PIPS\n"
+                "Breakeven Position\n\n"
                 f"Entry: {entry:.2f}\n"
-                f"New Stop Loss (break-even): {entry:.2f}\n"
+                f"New Stop Loss: {entry:.2f}\n"
                 f"TP2: {tp2:.2f}\n\n"
                 "Signal monitoring continues."
             )
             return
 
     else:
+
+        # After TP1, return to entry means TP1 was secured.
         if low <= entry:
             finish_trade_breakeven()
 
             send_telegram(
-                "⚠️ BUY SIGNAL RETURNED TO ENTRY\n\n"
-                "TP1 had been reached; monitoring is finished.\n"
+                "⚠️ BREAKEVEN POSITION CLOSED\n\n"
+                "Target One: 100 PIPS secured.\n"
+                "Price returned to Entry.\n"
                 "Waiting for new Support / Resistance."
             )
 
@@ -690,7 +731,9 @@ def manage_buy():
             finish_trade_tp2()
 
             send_telegram(
-                "🎉 BUY SIGNAL: TP2 REACHED\n\n"
+                "🏆 CONGRATULATIONS!\n\n"
+                "Target Two — 150 PIPS\n"
+                "Close Position\n\n"
                 "Signal monitoring finished.\n"
                 "Waiting for new Support / Resistance."
             )
@@ -707,6 +750,7 @@ def manage_sell():
     global tp1_hit, stop_loss, last_manage_15m_time
 
     candle = get_latest_closed("15m")
+
     if candle is None:
         return
 
@@ -719,13 +763,14 @@ def manage_sell():
 
     _, high, low, _ = candle_prices(candle)
 
-    # Before TP1, use conservative SL-first handling.
+    # Before TP1, check SL first if both levels are touched.
     if not tp1_hit:
+
         if high >= stop_loss:
             finish_trade_sl()
 
             send_telegram(
-                "⛔ SELL SIGNAL: STOP LOSS REACHED\n\n"
+                "⛔ SORRY FOR STOP LOSS\n\n"
                 "The signal is finished.\n"
                 "Waiting for new Support / Resistance."
             )
@@ -738,21 +783,26 @@ def manage_sell():
             stop_loss = entry
 
             send_telegram(
-                "🎉 SELL SIGNAL: TP1 REACHED\n\n"
+                "🎉 CONGRATULATIONS!\n\n"
+                "Target One — 100 PIPS\n"
+                "Breakeven Position\n\n"
                 f"Entry: {entry:.2f}\n"
-                f"New Stop Loss (break-even): {entry:.2f}\n"
+                f"New Stop Loss: {entry:.2f}\n"
                 f"TP2: {tp2:.2f}\n\n"
                 "Signal monitoring continues."
             )
             return
 
     else:
+
+        # After TP1, return to entry means TP1 was secured.
         if high >= entry:
             finish_trade_breakeven()
 
             send_telegram(
-                "⚠️ SELL SIGNAL RETURNED TO ENTRY\n\n"
-                "TP1 had been reached; monitoring is finished.\n"
+                "⚠️ BREAKEVEN POSITION CLOSED\n\n"
+                "Target One: 100 PIPS secured.\n"
+                "Price returned to Entry.\n"
                 "Waiting for new Support / Resistance."
             )
 
@@ -763,7 +813,9 @@ def manage_sell():
             finish_trade_tp2()
 
             send_telegram(
-                "🎉 SELL SIGNAL: TP2 REACHED\n\n"
+                "🏆 CONGRATULATIONS!\n\n"
+                "Target Two — 150 PIPS\n"
+                "Close Position\n\n"
                 "Signal monitoring finished.\n"
                 "Waiting for new Support / Resistance."
             )
@@ -779,14 +831,23 @@ def manage_sell():
 def make_weekly_report():
     total_profit = 0
     total_stop = 0
-    lines = ["📊 XAUUSD WEEKLY SIGNAL RESULTS", ""]
+
+    lines = [
+        "📊 XAUUSD WEEKLY SIGNAL RESULTS",
+        ""
+    ]
 
     days = [
-        "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday"
     ]
 
     for day in days:
         lines.append(day)
+
         trades = weekly_results[day]
 
         if not trades:
@@ -795,9 +856,15 @@ def make_weekly_report():
             continue
 
         for index, trade in enumerate(trades, start=1):
-            lines.append(f"Signal {index}: {trade['status']}")
-            lines.append(f"Profit: {trade['profit']} Pips")
-            lines.append(f"Stop Loss: {trade['stop_loss']} Pips")
+            lines.append(
+                f"Signal {index}: {trade['status']}"
+            )
+            lines.append(
+                f"Profit: {trade['profit']} Pips"
+            )
+            lines.append(
+                f"Stop Loss: {trade['stop_loss']} Pips"
+            )
             lines.append("")
 
             total_profit += trade["profit"]
@@ -808,7 +875,8 @@ def make_weekly_report():
         f"Total Take Profit: {total_profit} Pips",
         f"Total Stop Loss: {total_stop} Pips",
         "",
-        "Note: Results are simulated signal tracking, not broker records."
+        "Results are simulated signal tracking, "
+        "not broker records."
     ])
 
     return "\n".join(lines)
