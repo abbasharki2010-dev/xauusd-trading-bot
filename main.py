@@ -1,749 +1,821 @@
 import os
 import json
 import time
-import requests
+import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-# =========================================================
-# SETTINGS
-# =========================================================
-URL = "https://biquote.io/api/XAUUSD/ohlc"
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
-IRAQ_TZ = ZoneInfo("Asia/Baghdad")
+import requests
+
+# ==========================================
+# XAUUSD TELEGRAM SIGNAL BOT
+# SIGNAL ONLY - NO ORDERS
+# Timezone: Asia/Baghdad
+# ==========================================
+
+BOT_NAME = "XAUUSD TELEGRAM SIGNAL BOT"
+DATA_URL = "https://biquote.io/api/XAUUSD/ohlc"
+TZ = ZoneInfo("Asia/Baghdad")
+
 POLL_SECONDS = 15
 BREAKOUT_DISTANCE = 5.0
 STOP_BUFFER = 3.0
-TP1_DISTANCE = 10.0
-TP2_DISTANCE = 15.0
-# Default file works for process restarts in the same container.
-# For persistence across Railway redeploys, attach a Railway Volume
-# and set BOT_DATA_FILE=/data/xauusd_bot_state.json.
+
+# $1.00 price movement = 10 pips
+TARGET_PIPS = [50, 70, 80, 100, 150]
+TARGET_DISTANCES = [p / 10.0 for p in TARGET_PIPS]
+TARGET_NAMES = ["One", "Two", "Three", "Four", "Five"]
+
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 DATA_FILE = os.getenv("BOT_DATA_FILE", "bot_state.json")
-DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s"
+)
+log = logging.getLogger("xauusd-bot")
 session = requests.Session()
 
-# =========================================================
-# DEFAULT STATE
-# =========================================================
-support = None
-resistance = None
-state = "WAITING_SUPPORT_RESISTANCE"
-last_1h_time = None
-last_15m_time = None
-last_manage_15m_time = None
-last_update_id = 0
-direction = None
-entry = None
-stop_loss = None
-tp1 = None
-tp2 = None
-tp1_hit = False
-tp1_candle_time = None
-current_trade = None
-weekly_results = {day: [] for day in DAYS}
-last_report_week = None
-
-# =========================================================
-# TIME AND PERSISTENCE
-# =========================================================
-def iraq_now():
-    return datetime.now(IRAQ_TZ)
+DEFAULT_STATE = {
+    "support": None,
+    "resistance": None,
+    "state": "WAITING_SUPPORT_RESISTANCE",
+    "direction": None,
+    "last_1h_time": None,
+    "last_15m_time": None,
+    "current_trade": None,
+    "weekly_results": [],
+    "last_report_week": None,
+    "telegram_update_offset": 0,
+}
 
 
-def today_name():
-    return iraq_now().strftime("%A")
+def now():
+    return datetime.now(TZ)
 
 
 def save_state():
-    """Persist bot state. A Railway Volume is needed across redeploys."""
-    payload = {
-        "support": support,
-        "resistance": resistance,
-        "state": state,
-        "last_1h_time": last_1h_time,
-        "last_15m_time": last_15m_time,
-        "last_manage_15m_time": last_manage_15m_time,
-        "last_update_id": last_update_id,
-        "direction": direction,
-        "entry": entry,
-        "stop_loss": stop_loss,
-        "tp1": tp1,
-        "tp2": tp2,
-        "tp1_hit": tp1_hit,
-        "tp1_candle_time": tp1_candle_time,
-        "current_trade": current_trade,
-        "weekly_results": weekly_results,
-        "last_report_week": last_report_week,
-    }
     try:
-        folder = os.path.dirname(os.path.abspath(DATA_FILE))
-        os.makedirs(folder, exist_ok=True)
-        temp_file = DATA_FILE + ".tmp"
-        with open(temp_file, "w", encoding="utf-8") as file:
-            json.dump(payload, file, ensure_ascii=False, indent=2)
-        os.replace(temp_file, DATA_FILE)
-    except Exception as exc:
-        print("STATE SAVE ERROR:", repr(exc))
+        with open(DATA_FILE + ".tmp", "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+        os.replace(DATA_FILE + ".tmp", DATA_FILE)
+    except Exception:
+        log.exception("Could not save bot state")
 
 
 def load_state():
-    global support, resistance, state
-    global last_1h_time, last_15m_time, last_manage_15m_time
-    global last_update_id, direction, entry, stop_loss, tp1, tp2
-    global tp1_hit, tp1_candle_time, current_trade
-    global weekly_results, last_report_week
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as file:
-            saved = json.load(file)
-        support = saved.get("support")
-        resistance = saved.get("resistance")
-        state = saved.get("state", "WAITING_SUPPORT_RESISTANCE")
-        last_1h_time = saved.get("last_1h_time")
-        last_15m_time = saved.get("last_15m_time")
-        last_manage_15m_time = saved.get("last_manage_15m_time")
-        last_update_id = int(saved.get("last_update_id", 0))
-        direction = saved.get("direction")
-        entry = saved.get("entry")
-        stop_loss = saved.get("stop_loss")
-        tp1 = saved.get("tp1")
-        tp2 = saved.get("tp2")
-        tp1_hit = bool(saved.get("tp1_hit", False))
-        tp1_candle_time = saved.get("tp1_candle_time")
-        current_trade = saved.get("current_trade")
-        loaded_results = saved.get("weekly_results", {})
-        weekly_results = {
-            day: loaded_results.get(day, []) if isinstance(loaded_results, dict) else []
-            for day in DAYS
-        }
-        last_report_week = saved.get("last_report_week")
-        print("Saved bot state loaded from", DATA_FILE)
-    except FileNotFoundError:
-        print("No saved state found; starting fresh.")
-    except Exception as exc:
-        print("STATE LOAD ERROR:", repr(exc))
+    result = DEFAULT_STATE.copy()
 
-# =========================================================
-# TELEGRAM
-# =========================================================
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                result.update(json.load(f))
+        except Exception:
+            log.exception("Could not load bot state")
+
+    if not isinstance(result.get("weekly_results"), list):
+        result["weekly_results"] = []
+
+    # Avoid applying the new targets to an old-format active trade.
+    trade = result.get("current_trade")
+    if trade and "targets" not in trade:
+        result["current_trade"] = None
+        result["direction"] = None
+        result["state"] = (
+            "WAITING_1H"
+            if result.get("support") is not None
+            and result.get("resistance") is not None
+            else "WAITING_SUPPORT_RESISTANCE"
+        )
+
+    return result
+
+
+state = load_state()
+
+
+def fmt(value):
+    return f"{float(value):.2f}"
+
+
+def to_number(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def send_telegram(message):
-    if not BOT_TOKEN or not CHAT_ID:
-        print("ERROR: Telegram variables are missing.")
+    if not TOKEN or not CHAT_ID:
+        log.error("Telegram token or chat ID is missing.")
         return False
+
     try:
         response = session.post(
-            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-            data={"chat_id": CHAT_ID, "text": message},
-            timeout=15,
-        )
-        try:
-            result = response.json()
-        except ValueError:
-            result = {"description": response.text[:500]}
-        if response.ok and result.get("ok"):
-            print("Telegram message sent.")
-            return True
-        print("Telegram ERROR:", result)
-        return False
-    except Exception as exc:
-        print("Telegram ERROR:", repr(exc))
-        return False
-
-# =========================================================
-# CANDLE PATTERNS
-# =========================================================
-def is_hammer(o, h, l, c):
-    body = abs(c - o)
-    if body == 0:
-        return False
-    upper_wick = h - max(o, c)
-    lower_wick = min(o, c) - l
-    return lower_wick >= body * 2 and upper_wick <= body
-
-
-def is_shooting_star(o, h, l, c):
-    body = abs(c - o)
-    if body == 0:
-        return False
-    upper_wick = h - max(o, c)
-    lower_wick = min(o, c) - l
-    return upper_wick >= body * 2 and lower_wick <= body
-
-
-def is_bullish_engulfing(po, pc, co, cc):
-    return pc < po and cc > co and co <= pc and cc >= po
-
-
-def is_bearish_engulfing(po, pc, co, cc):
-    return pc > po and cc < co and co >= pc and cc <= po
-
-# =========================================================
-# MARKET DATA
-# =========================================================
-def get_bars(interval, limit=10):
-    try:
-        response = session.get(
-            URL,
-            params={"interval": interval, "limit": limit},
-            timeout=15,
+            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            json={
+                "chat_id": CHAT_ID,
+                "text": message,
+            },
+            timeout=20,
         )
         response.raise_for_status()
-        data = response.json()
-        if not isinstance(data, dict):
-            print("Market ERROR: Unexpected response.")
-            return []
-        bars = data.get("bars", [])
-        if not isinstance(bars, list):
-            print("Market ERROR: bars is not a list.")
-            return []
-        return bars
-    except Exception as exc:
-        print("Market ERROR:", repr(exc))
+        result = response.json()
+
+        if not result.get("ok"):
+            log.error("Telegram API error: %s", result)
+            return False
+
+        return True
+
+    except Exception:
+        log.exception("Could not send Telegram message")
+        return False
+
+
+# ==========================================
+# MARKET DATA
+# ==========================================
+
+def normalize_candle(item):
+    if not isinstance(item, dict):
+        return None
+
+    def get_value(*keys):
+        for key in keys:
+            if item.get(key) is not None:
+                return item[key]
+        return None
+
+    o = to_number(get_value("open", "o", "Open"))
+    h = to_number(get_value("high", "h", "High"))
+    low = to_number(get_value("low", "l", "Low"))
+    c = to_number(get_value("close", "c", "Close", "price"))
+    candle_time = get_value(
+        "time", "timestamp", "datetime", "date",
+        "t", "open_time", "openTime"
+    )
+
+    if None in (o, h, low, c):
+        return None
+
+    if isinstance(candle_time, (int, float)):
+        try:
+            if candle_time > 10_000_000_000:
+                candle_time = candle_time / 1000
+            candle_time = datetime.utcfromtimestamp(
+                candle_time
+            ).isoformat()
+        except Exception:
+            candle_time = str(candle_time)
+
+    return {
+        "time": str(candle_time) if candle_time is not None else None,
+        "open": o,
+        "high": h,
+        "low": low,
+        "close": c,
+    }
+
+
+def extract_candles(payload):
+    items = []
+
+    if isinstance(payload, list):
+        items = payload
+
+    elif isinstance(payload, dict):
+        for key in ("data", "candles", "ohlc", "result", "prices", "items"):
+            if isinstance(payload.get(key), list):
+                items = payload[key]
+                break
+
+    candles = []
+
+    for item in items:
+        candle = normalize_candle(item)
+        if candle:
+            candles.append(candle)
+
+    return candles
+
+
+def fetch_candles(timeframe):
+    # The API must support the timeframe requested for correct signals.
+    parameter_options = [
+        {"timeframe": timeframe},
+        {"interval": timeframe},
+        {"period": timeframe},
+        {"tf": timeframe},
+        {},
+    ]
+
+    for params in parameter_options:
+        try:
+            response = session.get(
+                DATA_URL,
+                params=params,
+                timeout=20,
+            )
+            response.raise_for_status()
+            candles = extract_candles(response.json())
+
+            if candles:
+                return candles
+
+        except Exception:
+            log.exception("Market data request failed for %s", timeframe)
+
+    return []
+
+
+def candle_id(candle):
+    return str(candle.get("time") or "")
+
+
+def get_closed_candles(timeframe):
+    candles = fetch_candles(timeframe)
+
+    if len(candles) < 2:
         return []
 
-
-def get_latest_closed(interval):
-    for candle in get_bars(interval):
-        if candle.get("isOpen") is False:
-            return candle
-    return None
+    # Assumes the API returns candles oldest-first
+    # and the newest candle is still forming.
+    return candles[:-1]
 
 
 def get_latest_monitoring_candle():
-    bars = get_bars("15m")
-    if not bars:
-        return None
-    for candle in bars:
-        if candle.get("isOpen") is True:
-            return candle
-    # Fallback assumes the API returns newest candles first.
-    return bars[0]
+    candles = fetch_candles("15m")
+    return candles[-1] if candles else None
 
 
-def get_two_closed_15m():
-    closed = []
-    for candle in get_bars("15m"):
-        if candle.get("isOpen") is False:
-            closed.append(candle)
-        if len(closed) == 2:
-            break
-    if len(closed) < 2:
-        return None, None
-    # Assumes newest candles are returned first.
-    return closed[0], closed[1]
-
-
-def candle_time(candle):
-    return str(candle.get("openTime", ""))
-
-
-def candle_prices(candle):
-    return (
-        float(candle["open"]),
-        float(candle["high"]),
-        float(candle["low"]),
-        float(candle["close"]),
-    )
-
-# =========================================================
-# TRADE RECORDS AND PIP CALCULATION
-# =========================================================
-def start_trade_record():
-    global current_trade
-    current_trade = {
-        "day": today_name(),
-        "profit": 0,
-        "stop_loss": 0,
-        "status": "OPEN",
-        "entry": entry,
-        "direction": direction,
-        "started_at": iraq_now().isoformat(),
-    }
-    save_state()
-
-
-def record_result(profit, loss, status):
-    global current_trade
-    if current_trade is None:
-        start_trade_record()
-    day = current_trade.get("day", today_name())
-    result = {
-        "profit": round(float(profit), 1),
-        "stop_loss": round(float(loss), 1),
-        "status": status,
-        "direction": current_trade.get("direction", direction),
-        "entry": current_trade.get("entry", entry),
-        "finished_at": iraq_now().isoformat(),
-    }
-    if day in weekly_results:
-        weekly_results[day].append(result)
-    print("TRADE RESULT:", status)
-    print("Profit:", result["profit"], "Pips")
-    print("Stop Loss:", result["stop_loss"], "Pips")
-    current_trade = None
-    save_state()
-
-
-def finish_trade_tp2():
-    record_result(150, 0, "TP2")
-
-
-def finish_trade_sl():
-    global entry, stop_loss
-    if entry is None or stop_loss is None:
-        loss_pips = 0
-    else:
-        loss_pips = round(abs(float(entry) - float(stop_loss)) * 10, 1)
-    record_result(0, loss_pips, "SL")
-
-
-def finish_trade_breakeven():
-    # TP1 was reached first, so this outcome records +100 pips.
-    record_result(100, 0, "TP1_BREAKEVEN")
-
-# =========================================================
-# RESET
-# =========================================================
-def reset_trade():
-    global direction, entry, stop_loss, tp1, tp2
-    global tp1_hit, tp1_candle_time, current_trade
-    global last_manage_15m_time
-    direction = None
-    entry = None
-    stop_loss = None
-    tp1 = None
-    tp2 = None
-    tp1_hit = False
-    tp1_candle_time = None
-    current_trade = None
-    last_manage_15m_time = None
-    save_state()
-
+# ==========================================
+# TELEGRAM COMMANDS
+# ==========================================
 
 def reset_everything():
-    global support, resistance, state, last_1h_time, last_15m_time
-    support = None
-    resistance = None
-    state = "WAITING_SUPPORT_RESISTANCE"
-    last_1h_time = None
-    last_15m_time = None
-    reset_trade()
+    state["support"] = None
+    state["resistance"] = None
+    state["state"] = "WAITING_SUPPORT_RESISTANCE"
+    state["direction"] = None
+    state["last_1h_time"] = None
+    state["last_15m_time"] = None
+    state["current_trade"] = None
     save_state()
-    print("Waiting for new Support / Resistance.")
 
-# =========================================================
-# SUPPORT / RESISTANCE
-# =========================================================
-def set_support_resistance(new_support, new_resistance):
-    global support, resistance, state, last_1h_time, last_15m_time
-    if new_support >= new_resistance:
-        send_telegram("❌ Support must be below Resistance.")
-        return
-    support = float(new_support)
-    resistance = float(new_resistance)
-    reset_trade()
-    state = "WAITING_1H"
-    current_1h = get_latest_closed("1h")
-    current_15m = get_latest_closed("15m")
-    last_1h_time = candle_time(current_1h) if current_1h else None
-    last_15m_time = candle_time(current_15m) if current_15m else None
-    save_state()
-    print("NEW SUPPORT / RESISTANCE", support, resistance, state)
-    send_telegram(
-        "✅ SUPPORT / RESISTANCE UPDATED\n\n"
-        f"🟦 Support: {support:.2f}\n"
-        f"🟥 Resistance: {resistance:.2f}\n\n"
-        "🤖 Bot is watching XAUUSD."
-    )
 
-# =========================================================
-# TELEGRAM COMMANDS
-# =========================================================
-def check_telegram():
-    global last_update_id
-    if not BOT_TOKEN or not CHAT_ID:
+def handle_command(text):
+    parts = text.split()
+    command = parts[0].split("@")[0].lower()
+
+    if command == "/start":
+        send_telegram(
+            "XAUUSD TELEGRAM SIGNAL BOT\n"
+            "Signal-only mode: NO ORDERS\n"
+            "Time zone: Asia/Baghdad\n\n"
+            "Commands:\n"
+            "/support 4275 4300\n"
+            "/status\n"
+            "/cancel"
+        )
         return
+
+    if command == "/support":
+        if len(parts) != 3:
+            send_telegram(
+                "Usage: /support SUPPORT RESISTANCE\n"
+                "Example: /support 4275 4300"
+            )
+            return
+
+        support = to_number(parts[1])
+        resistance = to_number(parts[2])
+
+        if (
+            support is None
+            or resistance is None
+            or support >= resistance
+        ):
+            send_telegram("Support must be below Resistance.")
+            return
+
+        state["support"] = support
+        state["resistance"] = resistance
+        state["state"] = "WAITING_1H"
+        state["direction"] = None
+        state["current_trade"] = None
+        state["last_1h_time"] = None
+        state["last_15m_time"] = None
+        save_state()
+
+        send_telegram(
+            "✅ SUPPORT / RESISTANCE UPDATED\n"
+            f"Support: {fmt(support)}\n"
+            f"Resistance: {fmt(resistance)}\n"
+            "Bot is watching XAUUSD.\n"
+            "Waiting for a CLOSED 1H breakout candle."
+        )
+        return
+
+    if command == "/status":
+        message = (
+            "XAUUSD BOT STATUS\n"
+            "Mode: SIGNAL ONLY — NO ORDERS\n"
+            f"State: {state['state']}\n"
+            f"Support: {fmt(state['support']) if state['support'] is not None else 'Not set'}\n"
+            f"Resistance: {fmt(state['resistance']) if state['resistance'] is not None else 'Not set'}"
+        )
+
+        trade = state.get("current_trade")
+
+        if trade:
+            message += (
+                f"\nDirection: {trade['direction']}"
+                f"\nEntry: {fmt(trade['entry'])}"
+                f"\nStop Loss: {fmt(trade['stop_loss'])}"
+                f"\nHighest target: {trade['highest_target_index']}"
+            )
+
+        send_telegram(message)
+        return
+
+    if command == "/cancel":
+        reset_everything()
+        send_telegram(
+            "🛑 Cancelled.\n"
+            "Support/Resistance cleared.\n"
+            "Waiting for new Support/Resistance."
+        )
+        return
+
+    send_telegram("Unknown command. Use /support, /status, or /cancel.")
+
+
+def poll_telegram_commands():
+    if not TOKEN:
+        return
+
+    offset = int(state.get("telegram_update_offset", 0))
+
     try:
         response = session.get(
-            f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates",
-            params={"offset": last_update_id + 1, "timeout": 1},
-            timeout=5,
+            f"https://api.telegram.org/bot{TOKEN}/getUpdates",
+            params={"timeout": 0, "offset": offset},
+            timeout=15,
         )
         response.raise_for_status()
-        data = response.json()
-        if not data.get("ok"):
-            print("Telegram getUpdates ERROR:", data)
-            return
-        for update in data.get("result", []):
-            last_update_id = update["update_id"]
-            save_state()
-            message = update.get("message")
-            if not message:
-                continue
-            text = message.get("text", "").strip()
+        result = response.json()
+
+        for update in result.get("result", []):
+            state["telegram_update_offset"] = max(
+                int(state.get("telegram_update_offset", 0)),
+                int(update["update_id"]) + 1,
+            )
+
+            message = update.get("message", {})
             chat_id = str(message.get("chat", {}).get("id", ""))
-            if chat_id != str(CHAT_ID):
+
+            if CHAT_ID and chat_id != str(CHAT_ID):
                 continue
-            if text.startswith("/support"):
-                parts = text.split()
-                if len(parts) != 3:
-                    send_telegram("❌ Wrong format.\n\nUse:\n/support 4275 4300")
-                    continue
-                try:
-                    new_support = float(parts[1])
-                    new_resistance = float(parts[2])
-                    if new_support >= new_resistance:
-                        send_telegram("❌ Support must be below Resistance.")
-                        continue
-                    set_support_resistance(new_support, new_resistance)
-                except ValueError:
-                    send_telegram("❌ Invalid prices.\nUse: /support 4275 4300")
-            elif text == "/cancel":
-                reset_everything()
-                send_telegram(
-                    "❌ SUPPORT / RESISTANCE CANCELLED\n\n"
-                    "⏳ Waiting for new Support / Resistance.\n\n"
-                    "Use:\n/support 4275 4300"
-                )
-            elif text == "/status":
-                if support is None or resistance is None:
-                    send_telegram("⚠️ Support / Resistance not set.\n\nUse: /support 4275 4300")
-                else:
-                    send_telegram(
-                        "📊 XAUUSD BOT STATUS\n\n"
-                        f"🟦 Support: {support:.2f}\n"
-                        f"🟥 Resistance: {resistance:.2f}\n"
-                        f"🤖 State: {state}\n"
-                        "🔒 Signal-only: NO ORDERS"
-                    )
-    except Exception as exc:
-        print("Telegram CHECK ERROR:", repr(exc))
 
-# =========================================================
-# 1H BREAKOUT
-# =========================================================
-def check_1h():
-    global state, last_1h_time, last_15m_time
-    if support is None or resistance is None:
-        return
-    candle = get_latest_closed("1h")
-    if candle is None:
-        return
-    candle_id = candle_time(candle)
-    if not candle_id or candle_id == last_1h_time:
-        return
-    last_1h_time = candle_id
-    close_price = float(candle["close"])
-    print("NEW CLOSED 1H:", close_price)
-    if close_price >= resistance + BREAKOUT_DISTANCE:
-        state = "WAITING_BUY_15M"
-        current = get_latest_closed("15m")
-        last_15m_time = candle_time(current) if current else None
+            text = (message.get("text") or "").strip()
+
+            if text.startswith("/"):
+                handle_command(text)
+
         save_state()
+
+    except Exception:
+        log.exception("Telegram command polling failed")
+
+
+# ==========================================
+# 1H BREAKOUT CONFIRMATION
+# ==========================================
+
+def process_1h_breakout():
+    if state["state"] != "WAITING_1H":
+        return
+
+    if state["support"] is None or state["resistance"] is None:
+        return
+
+    candles = get_closed_candles("1h")
+
+    if not candles:
+        return
+
+    candle = candles[-1]
+    cid = candle_id(candle)
+
+    if not cid or cid == state.get("last_1h_time"):
+        return
+
+    state["last_1h_time"] = cid
+    close = candle["close"]
+
+    if close >= state["resistance"] + BREAKOUT_DISTANCE:
+        state["direction"] = "BUY"
+        state["state"] = "WAITING_15M_PATTERN_BUY"
+        save_state()
+
         send_telegram(
-            "🟢 CONFIRMATION FOR TODAY: BUY\n\n"
-            "1H breakout confirmed. Wait for Hammer or Bullish Engulfing on a CLOSED 15M candle."
+            "🟢 CONFIRMATION FOR TODAY: BUY\n"
+            "1H breakout confirmed.\n"
+            "Wait for Hammer or Bullish Engulfing "
+            "on a CLOSED 15M candle."
         )
-    elif close_price <= support - BREAKOUT_DISTANCE:
-        state = "WAITING_SELL_15M"
-        current = get_latest_closed("15m")
-        last_15m_time = candle_time(current) if current else None
+
+    elif close <= state["support"] - BREAKOUT_DISTANCE:
+        state["direction"] = "SELL"
+        state["state"] = "WAITING_15M_PATTERN_SELL"
         save_state()
+
         send_telegram(
-            "🔴 CONFIRMATION FOR TODAY: SELL\n\n"
-            "1H breakout confirmed. Wait for Shooting Star or Bearish Engulfing on a CLOSED 15M candle."
+            "🔴 CONFIRMATION FOR TODAY: SELL\n"
+            "1H breakout confirmed.\n"
+            "Wait for Shooting Star or Bearish Engulfing "
+            "on a CLOSED 15M candle."
         )
-    else:
-        print("NO 1H BREAKOUT")
-        save_state()
 
-# =========================================================
-# 15M SIGNAL CONFIRMATION
-# =========================================================
-def check_buy_confirmation():
-    global state, last_15m_time, direction, entry, stop_loss, tp1, tp2
-    global tp1_hit, tp1_candle_time, last_manage_15m_time
-    current, previous = get_two_closed_15m()
-    if current is None or previous is None:
-        return
-    current_id = candle_time(current)
-    if not current_id or current_id == last_15m_time:
-        return
-    last_15m_time = current_id
-    o, h, l, c = candle_prices(current)
-    po, _, _, pc = candle_prices(previous)
-    hammer = is_hammer(o, h, l, c)
-    engulfing = is_bullish_engulfing(po, pc, o, c)
-    if not (hammer or engulfing):
-        save_state()
-        return
-    direction = "BUY"
-    entry = c
-    stop_loss = l - STOP_BUFFER
-    tp1 = entry + TP1_DISTANCE
-    tp2 = entry + TP2_DISTANCE
-    tp1_hit = False
-    tp1_candle_time = None
-    last_manage_15m_time = current_id
-    state = "MANAGING_BUY"
-    start_trade_record()
     save_state()
-    pattern = "Hammer" if hammer else "Bullish Engulfing"
-    send_telegram(
-        "🟢 XAUUSD BUY SIGNAL\n\n"
-        f"Pattern: {pattern}\nEntry: {entry:.2f}\nStop Loss: {stop_loss:.2f}\n"
-        f"TP1: {tp1:.2f}\nTP2: {tp2:.2f}\n\nSIGNAL ONLY — NO ORDER PLACED"
-    )
 
 
-def check_sell_confirmation():
-    global state, last_15m_time, direction, entry, stop_loss, tp1, tp2
-    global tp1_hit, tp1_candle_time, last_manage_15m_time
-    current, previous = get_two_closed_15m()
-    if current is None or previous is None:
-        return
-    current_id = candle_time(current)
-    if not current_id or current_id == last_15m_time:
-        return
-    last_15m_time = current_id
-    o, h, l, c = candle_prices(current)
-    po, _, _, pc = candle_prices(previous)
-    shooting = is_shooting_star(o, h, l, c)
-    engulfing = is_bearish_engulfing(po, pc, o, c)
-    if not (shooting or engulfing):
-        save_state()
-        return
-    direction = "SELL"
-    entry = c
-    stop_loss = h + STOP_BUFFER
-    tp1 = entry - TP1_DISTANCE
-    tp2 = entry - TP2_DISTANCE
-    tp1_hit = False
-    tp1_candle_time = None
-    last_manage_15m_time = current_id
-    state = "MANAGING_SELL"
-    start_trade_record()
-    save_state()
-    pattern = "Shooting Star" if shooting else "Bearish Engulfing"
-    send_telegram(
-        "🔴 XAUUSD SELL SIGNAL\n\n"
-        f"Pattern: {pattern}\nEntry: {entry:.2f}\nStop Loss: {stop_loss:.2f}\n"
-        f"TP1: {tp1:.2f}\nTP2: {tp2:.2f}\n\nSIGNAL ONLY — NO ORDER PLACED"
-    )
+# ==========================================
+# 15M CANDLE PATTERNS
+# ==========================================
 
-# =========================================================
-# TRADE MONITORING
-# =========================================================
-def manage_buy():
-    global tp1_hit, stop_loss, tp1_candle_time
-    candle = get_latest_monitoring_candle()
-    if candle is None:
-        return
-    candle_id = candle_time(candle)
-    try:
-        _, high, low, close = candle_prices(candle)
-    except (KeyError, TypeError, ValueError) as exc:
-        print("BUY MONITOR DATA ERROR:", repr(exc))
-        return
-    print(f"BUY MONITOR | Price: {close:.2f} | TP1: {tp1:.2f} | TP2: {tp2:.2f} | SL: {stop_loss:.2f}")
-    if not tp1_hit:
-        # Conservative rule: if SL and TP1 are both touched within the same poll/candle, count SL first.
-        if low <= stop_loss:
-            finish_trade_sl()
-            send_telegram(
-                "⛔ BUY SIGNAL: STOP LOSS REACHED\n\n"
-                f"Entry: {entry:.2f}\nStop Loss: {stop_loss:.2f}\n\n"
-                "The signal is finished.\nWaiting for new Support / Resistance."
-            )
-            reset_everything()
-            return
-        if high >= tp1:
-            tp1_hit = True
-            stop_loss = entry
-            tp1_candle_time = candle_id
-            save_state()
-            send_telegram(
-                "🎉 BUY TP1 REACHED\n\nTarget One — 100 PIPS\nStop Loss moved to Breakeven.\n\n"
-                f"Entry: {entry:.2f}\nNew Stop Loss: {entry:.2f}\nTP2: {tp2:.2f}\n\n"
-                "Monitoring continues every 15 seconds."
-            )
-            return
-    else:
-        if high >= tp2:
-            finish_trade_tp2()
-            send_telegram(
-                "🏆 BUY TP2 REACHED\n\nTarget Two — 150 PIPS\n"
-                f"Entry: {entry:.2f}\nTP2: {tp2:.2f}\n\n"
-                "Signal monitoring finished.\nWaiting for new Support / Resistance."
-            )
-            reset_everything()
-            return
-        if candle_id == tp1_candle_time:
-            return
-        if low <= entry:
-            finish_trade_breakeven()
-            send_telegram(
-                "⚠️ BUY BREAKEVEN REACHED\n\nTarget One: 100 PIPS was reached first.\n"
-                "Price returned to Entry.\n\nWaiting for new Support / Resistance."
-            )
-            reset_everything()
-            return
+def is_hammer(candle):
+    body = abs(candle["close"] - candle["open"])
+
+    if body <= 0:
+        return False
+
+    lower_wick = min(candle["open"], candle["close"]) - candle["low"]
+    upper_wick = candle["high"] - max(candle["open"], candle["close"])
+
+    return lower_wick >= 2 * body and upper_wick <= body
 
 
-def manage_sell():
-    global tp1_hit, stop_loss, tp1_candle_time
-    candle = get_latest_monitoring_candle()
-    if candle is None:
-        return
-    candle_id = candle_time(candle)
-    try:
-        _, high, low, close = candle_prices(candle)
-    except (KeyError, TypeError, ValueError) as exc:
-        print("SELL MONITOR DATA ERROR:", repr(exc))
-        return
-    print(f"SELL MONITOR | Price: {close:.2f} | TP1: {tp1:.2f} | TP2: {tp2:.2f} | SL: {stop_loss:.2f}")
-    if not tp1_hit:
-        if high >= stop_loss:
-            finish_trade_sl()
-            send_telegram(
-                "⛔ SELL SIGNAL: STOP LOSS REACHED\n\n"
-                f"Entry: {entry:.2f}\nStop Loss: {stop_loss:.2f}\n\n"
-                "The signal is finished.\nWaiting for new Support / Resistance."
-            )
-            reset_everything()
-            return
-        if low <= tp1:
-            tp1_hit = True
-            stop_loss = entry
-            tp1_candle_time = candle_id
-            save_state()
-            send_telegram(
-                "🎉 SELL TP1 REACHED\n\nTarget One — 100 PIPS\nStop Loss moved to Breakeven.\n\n"
-                f"Entry: {entry:.2f}\nNew Stop Loss: {entry:.2f}\nTP2: {tp2:.2f}\n\n"
-                "Monitoring continues every 15 seconds."
-            )
-            return
-    else:
-        if low <= tp2:
-            finish_trade_tp2()
-            send_telegram(
-                "🏆 SELL TP2 REACHED\n\nTarget Two — 150 PIPS\n"
-                f"Entry: {entry:.2f}\nTP2: {tp2:.2f}\n\n"
-                "Signal monitoring finished.\nWaiting for new Support / Resistance."
-            )
-            reset_everything()
-            return
-        if candle_id == tp1_candle_time:
-            return
-        if high >= entry:
-            finish_trade_breakeven()
-            send_telegram(
-                "⚠️ SELL BREAKEVEN REACHED\n\nTarget One: 100 PIPS was reached first.\n"
-                "Price returned to Entry.\n\nWaiting for new Support / Resistance."
-            )
-            reset_everything()
-            return
+def is_shooting_star(candle):
+    body = abs(candle["close"] - candle["open"])
 
-# =========================================================
-# WEEKLY REPORT
-# =========================================================
-def make_weekly_report():
-    total_profit = 0.0
-    total_loss = 0.0
-    total_signals = 0
-    wins = 0
-    losses = 0
-    for day in DAYS:
-        for trade in weekly_results.get(day, []):
-            total_signals += 1
-            total_profit += float(trade.get("profit", 0) or 0)
-            total_loss += float(trade.get("stop_loss", 0) or 0)
-            status = trade.get("status", "")
-            if status == "SL":
-                losses += 1
-            else:
-                wins += 1
-    total_profit = round(total_profit, 1)
-    total_loss = round(total_loss, 1)
-    net = round(total_profit - total_loss, 1)
-    net_text = f"+{net:g}" if net >= 0 else f"−{abs(net):g}"
-    profit_text = f"+{total_profit:g}"
-    loss_text = f"−{total_loss:g}"
+    if body <= 0:
+        return False
+
+    lower_wick = min(candle["open"], candle["close"]) - candle["low"]
+    upper_wick = candle["high"] - max(candle["open"], candle["close"])
+
+    return upper_wick >= 2 * body and lower_wick <= body
+
+
+def bullish_engulfing(previous, current):
     return (
-        "📊 ئەنجامی هەفتانەی XAUUSD\n\n"
-        "ئەنجامی کۆتایی بە پیپ\n"
-        f"{net_text} Pips\n\n"
-        f"🟢 کۆی قازانج: {profit_text} Pips\n"
-        f"🔴 کۆی زیان لە ستۆپ: {loss_text} Pips\n\n"
-        f"📈 ژمارەی سیگناڵ: {total_signals}\n"
-        f"✅ سیگناڵی بردنەوە: {wins}\n"
-        f"❌ سیگناڵی ستۆپ: {losses}\n\n"
-        "تێبینی: ئەنجامەکان بەپێی چاودێری سیگناڵەکانن، نەک تۆماری بروکەر."
+        previous["close"] < previous["open"]
+        and current["close"] > current["open"]
+        and current["open"] <= previous["close"]
+        and current["close"] >= previous["open"]
     )
 
 
-def check_weekly_report():
-    global last_report_week, weekly_results
-    now = iraq_now()
-    # Friday at or after 23:00 Iraq time.
-    if now.weekday() != 4 or now.hour < 23:
+def bearish_engulfing(previous, current):
+    return (
+        previous["close"] > previous["open"]
+        and current["close"] < current["open"]
+        and current["open"] >= previous["close"]
+        and current["close"] <= previous["open"]
+    )
+
+
+def process_15m_pattern():
+    if state["state"] not in (
+        "WAITING_15M_PATTERN_BUY",
+        "WAITING_15M_PATTERN_SELL",
+    ):
         return
-    current_week = now.strftime("%Y-%W")
-    if last_report_week == current_week:
+
+    candles = get_closed_candles("15m")
+
+    if len(candles) < 2:
         return
-    report = make_weekly_report()
-    if send_telegram(report):
-        last_report_week = current_week
-        weekly_results = {day: [] for day in DAYS}
+
+    previous, current = candles[-2], candles[-1]
+    cid = candle_id(current)
+
+    if not cid or cid == state.get("last_15m_time"):
+        return
+
+    state["last_15m_time"] = cid
+    direction = state["direction"]
+    pattern = None
+
+    if direction == "BUY":
+        if is_hammer(current):
+            pattern = "Hammer"
+        elif bullish_engulfing(previous, current):
+            pattern = "Bullish Engulfing"
+
+    elif direction == "SELL":
+        if is_shooting_star(current):
+            pattern = "Shooting Star"
+        elif bearish_engulfing(previous, current):
+            pattern = "Bearish Engulfing"
+
+    if not pattern:
         save_state()
-        print("WEEKLY REPORT SENT")
+        return
 
-# =========================================================
-# STARTUP
-# =========================================================
-load_state()
-print("================================")
-print("XAUUSD TELEGRAM SIGNAL BOT")
-print("Signal-only mode: NO ORDERS")
-print("Time zone: Asia/Baghdad")
-print("Target monitoring: every 15 seconds")
-print("Saved state file:", DATA_FILE)
-print("================================")
-if not BOT_TOKEN or not CHAT_ID:
-    raise RuntimeError("Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in Railway Variables.")
+    entry = current["close"]
 
-# =========================================================
+    if direction == "BUY":
+        stop_loss = current["low"] - STOP_BUFFER
+        targets = [entry + distance for distance in TARGET_DISTANCES]
+    else:
+        stop_loss = current["high"] + STOP_BUFFER
+        targets = [entry - distance for distance in TARGET_DISTANCES]
+
+    state["current_trade"] = {
+        "direction": direction,
+        "pattern": pattern,
+        "entry": entry,
+        "initial_stop_loss": stop_loss,
+        "stop_loss": stop_loss,
+        "targets": targets,
+        "target_pips": TARGET_PIPS[:],
+        "target_hits": [False] * 5,
+        "highest_target_index": 0,
+        "entry_time": cid,
+    }
+
+    state["state"] = "MANAGING_BUY" if direction == "BUY" else "MANAGING_SELL"
+    save_state()
+
+    targets_text = "\n".join(
+        f"TP{i}: {fmt(target)} ({TARGET_PIPS[i - 1]} Pips)"
+        for i, target in enumerate(targets, start=1)
+    )
+
+    send_telegram(
+        f"{'🟢' if direction == 'BUY' else '🔴'} XAUUSD {direction} SIGNAL\n\n"
+        f"Pattern: {pattern}\n"
+        f"Entry: {fmt(entry)}\n"
+        f"Stop Loss: {fmt(stop_loss)}\n"
+        f"{targets_text}\n\n"
+        "SIGNAL ONLY — NO ORDER PLACED."
+    )
+
+
+# ==========================================
+# TRADE RESULT TRACKING
+# ==========================================
+
+def record_result(trade, status, pips):
+    state.setdefault("weekly_results", []).append({
+        "date": now().date().isoformat(),
+        "direction": trade["direction"],
+        "status": status,
+        "pips": int(pips),
+        "entry": trade["entry"],
+        "pattern": trade["pattern"],
+    })
+    save_state()
+
+
+def finish_after_stop():
+    trade = state.get("current_trade")
+
+    if not trade:
+        return
+
+    highest = int(trade.get("highest_target_index", 0))
+
+    if highest > 0:
+        # After TP1, TP2 or TP3, return to original SL
+        # records the highest target's profit, not a loss.
+        pips = int(trade["target_pips"][highest - 1])
+
+        record_result(trade, f"TP{highest}_THEN_STOP", pips)
+
+        send_telegram(
+            f"↩️ Price returned to stop after Target {TARGET_NAMES[highest - 1]}.\n"
+            f"Recorded result: +{pips} Pips.\n"
+            "This is NOT counted as an SL loss."
+        )
+
+    else:
+        loss_pips = -int(round(
+            abs(trade["entry"] - trade["initial_stop_loss"]) * 10
+        ))
+
+        record_result(trade, "SL", loss_pips)
+
+        send_telegram(
+            "❌ XAUUSD STOP LOSS HIT\n"
+            f"Entry: {fmt(trade['entry'])}\n"
+            f"Stop Loss: {fmt(trade['initial_stop_loss'])}\n"
+            f"Result: {loss_pips} Pips\n"
+            "No target was reached."
+        )
+
+    reset_everything()
+
+
+def finish_at_target_five():
+    trade = state.get("current_trade")
+
+    if not trade:
+        return
+
+    record_result(trade, "TP5", 150)
+
+    send_telegram(
+        "🏁 TARGET FIVE REACHED\n"
+        "Congratulations Target Five 150 Pips\n"
+        "Signal tracking finished. No order was placed."
+    )
+
+    reset_everything()
+
+
+def stop_was_hit(trade, candle):
+    stop = float(trade["stop_loss"])
+
+    if trade["direction"] == "BUY":
+        return candle["low"] <= stop
+
+    return candle["high"] >= stop
+
+
+def target_was_hit(trade, target, candle):
+    if trade["direction"] == "BUY":
+        return candle["high"] >= target
+
+    return candle["low"] <= target
+
+
+def process_trade_management():
+    trade = state.get("current_trade")
+
+    if not trade:
+        return
+
+    candle = get_latest_monitoring_candle()
+
+    if not candle:
+        return
+
+    # Do not manage the candle that created the signal.
+    if candle_id(candle) == trade.get("entry_time"):
+        return
+
+    # IMPORTANT:
+    # If the stop and a target are both inside the same candle,
+    # candle OHLC cannot tell us which was reached first.
+    # The bot checks the stop first as a conservative rule.
+    if stop_was_hit(trade, candle):
+        finish_after_stop()
+        return
+
+    for index, target in enumerate(trade["targets"], start=1):
+        if trade["target_hits"][index - 1]:
+            continue
+
+        if not target_was_hit(trade, target, candle):
+            continue
+
+        trade["target_hits"][index - 1] = True
+        trade["highest_target_index"] = max(
+            trade["highest_target_index"],
+            index
+        )
+        save_state()
+
+        pips = int(trade["target_pips"][index - 1])
+
+        send_telegram(
+            f"🎉 Congratulations Target {TARGET_NAMES[index - 1]} {pips} Pips"
+        )
+
+        if index == 4:
+            # Move stop to entry only after Target Four.
+            trade["stop_loss"] = trade["entry"]
+            save_state()
+
+            send_telegram(
+                "🔒 Target Four reached (100 Pips).\n"
+                f"Stop Loss moved to Breakeven: {fmt(trade['entry'])}."
+            )
+
+        if index == 5:
+            finish_at_target_five()
+            return
+
+    save_state()
+
+
+# ==========================================
+# WEEKLY REPORT
+# ==========================================
+
+def week_key(date_value):
+    iso = date_value.isocalendar()
+    return f"{iso.year}-W{iso.week:02d}"
+
+
+def send_weekly_report_if_due():
+    current = now()
+
+    # Friday, 23:00 or later in Baghdad time.
+    if current.weekday() != 4 or current.hour < 23:
+        return
+
+    key = week_key(current.date())
+
+    if state.get("last_report_week") == key:
+        return
+
+    results = [
+        item for item in state.get("weekly_results", [])
+        if item.get("date")
+        and week_key(datetime.fromisoformat(item["date"]).date()) == key
+    ]
+
+    wins = sum(1 for item in results if item["status"] != "SL")
+    losses = sum(1 for item in results if item["status"] == "SL")
+    net_pips = sum(int(item["pips"]) for item in results)
+
+    lines = [
+        "📊 XAUUSD WEEKLY RESULTS",
+        f"Week: {key}",
+        "Signal tracking only — not broker records.",
+        f"Trades: {len(results)}",
+        f"Wins: {wins}",
+        f"Losses: {losses}",
+        f"Net Pips: {net_pips:+d}",
+    ]
+
+    for item in results:
+        lines.append(
+            f"{item['direction']} | {item['status']} | "
+            f"{int(item['pips']):+d} pips | {item['date']}"
+        )
+
+    if not results:
+        lines.append("No completed trades this week.")
+
+    send_telegram("\n".join(lines))
+
+    state["last_report_week"] = key
+    save_state()
+
+
+# ==========================================
 # MAIN LOOP
-# =========================================================
-while True:
-    try:
-        check_telegram()
-        check_weekly_report()
-        # Do not create/manage market signals during weekends.
-        if iraq_now().weekday() >= 5:
-            time.sleep(POLL_SECONDS)
-            continue
-        if support is None or resistance is None:
-            time.sleep(POLL_SECONDS)
-            continue
-        if state == "WAITING_1H":
-            check_1h()
-        elif state == "WAITING_BUY_15M":
-            check_buy_confirmation()
-        elif state == "WAITING_SELL_15M":
-            check_sell_confirmation()
-        elif state == "MANAGING_BUY":
-            manage_buy()
-        elif state == "MANAGING_SELL":
-            manage_sell()
-        save_state()
+# ==========================================
+
+def main():
+    if not TOKEN or not CHAT_ID:
+        raise RuntimeError(
+            "Missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID. "
+            "Set both in Railway Variables."
+        )
+
+    log.info("%s started — SIGNAL ONLY.", BOT_NAME)
+
+    send_telegram(
+        "✅ XAUUSD TELEGRAM SIGNAL BOT STARTED\n"
+        "Signal-only mode: NO ORDERS\n"
+        "Time zone: Asia/Baghdad\n"
+        "Use /support SUPPORT RESISTANCE to begin."
+    )
+
+    while True:
+        try:
+            poll_telegram_commands()
+
+            # No new trading signals or trade management on weekends.
+            if now().weekday() < 5:
+                if state["state"] == "WAITING_1H":
+                    process_1h_breakout()
+
+                if state["state"] in (
+                    "WAITING_15M_PATTERN_BUY",
+                    "WAITING_15M_PATTERN_SELL",
+                ):
+                    process_15m_pattern()
+
+                if state["state"] in ("MANAGING_BUY", "MANAGING_SELL"):
+                    process_trade_management()
+
+            send_weekly_report_if_due()
+            save_state()
+
+        except Exception:
+            log.exception("Main loop error")
+
         time.sleep(POLL_SECONDS)
-    except KeyboardInterrupt:
-        print("Bot stopped.")
-        save_state()
-        break
-    except Exception as exc:
-        print("MAIN ERROR:", repr(exc))
-        save_state()
-        time.sleep(POLL_SECONDS)
+
+
+if __name__ == "__main__":
+    main()
